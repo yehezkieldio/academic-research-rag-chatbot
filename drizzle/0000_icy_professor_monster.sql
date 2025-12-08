@@ -1,3 +1,6 @@
+CREATE EXTENSION IF NOT EXISTS "vector";
+CREATE EXTENSION IF NOT EXISTS pg_trgm;
+
 CREATE TABLE "ablation_studies" (
 	"id" uuid PRIMARY KEY DEFAULT gen_random_uuid() NOT NULL,
 	"name" text NOT NULL,
@@ -164,4 +167,4 @@ ALTER TABLE "evaluation_questions" ADD CONSTRAINT "evaluation_questions_run_id_e
 ALTER TABLE "guardrail_logs" ADD CONSTRAINT "guardrail_logs_session_id_chat_sessions_id_fk" FOREIGN KEY ("session_id") REFERENCES "public"."chat_sessions"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "statistical_analyses" ADD CONSTRAINT "statistical_analyses_evaluation_run_id_evaluation_runs_id_fk" FOREIGN KEY ("evaluation_run_id") REFERENCES "public"."evaluation_runs"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
 ALTER TABLE "statistical_analyses" ADD CONSTRAINT "statistical_analyses_ablation_study_id_ablation_studies_id_fk" FOREIGN KEY ("ablation_study_id") REFERENCES "public"."ablation_studies"("id") ON DELETE cascade ON UPDATE no action;--> statement-breakpoint
-CREATE INDEX "content_search_idx" ON "document_chunks" USING gin ("content");
+CREATE INDEX "content_search_idx" ON "document_chunks" USING gin ("content" gin_trgm_ops);

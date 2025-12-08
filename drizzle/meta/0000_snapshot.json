@@ -1,5 +1,5 @@
 {
-  "id": "e12b7b0f-6b91-4024-af39-b71a419f3ba8",
+  "id": "679de155-6b9e-4ec6-b529-7a9d755948a7",
   "prevId": "00000000-0000-0000-0000-000000000000",
   "version": "7",
   "dialect": "postgresql",
@@ -411,9 +411,9 @@
           "name": "content_search_idx",
           "columns": [
             {
-              "expression": "content",
-              "isExpression": false,
+              "expression": "\"content\" gin_trgm_ops",
               "asc": true,
+              "isExpression": true,
               "nulls": "last"
             }
           ],

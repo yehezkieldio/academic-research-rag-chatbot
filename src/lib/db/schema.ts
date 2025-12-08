@@ -1,3 +1,4 @@
+import { sql } from "drizzle-orm";
 import { boolean, index, integer, jsonb, pgTable, real, text, timestamp, uuid, vector } from "drizzle-orm/pg-core";
 import type {
     AblationStudyConfiguration,
@@ -42,7 +43,7 @@ export const documentChunks = pgTable(
         keywordVector: text("keyword_vector"), // TF-IDF vector as JSON
         createdAt: timestamp("created_at").defaultNow().notNull(),
     },
-    (table) => [index("content_search_idx").using("gin", table.content)]
+    (table) => [index("content_search_idx").using("gin", sql`${table.content} gin_trgm_ops`)]
 );
 
 export const guardrailLogs = pgTable("guardrail_logs", {
