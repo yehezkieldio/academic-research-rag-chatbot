@@ -12,7 +12,11 @@
     "typecheck": "tsc --noEmit",
     "format": "biome format . --write",
     "lint": "biome lint .",
-    "lint:fix": "biome lint . --fix --unsafe"
+    "lint:fix": "biome lint . --fix --unsafe",
+    "db:generate": "drizzle-kit generate",
+    "db:migrate": "drizzle-kit migrate",
+    "db:push": "drizzle-kit push",
+    "db:studio": "drizzle-kit studio"
   },
   "dependencies": {
     "@radix-ui/react-slot": "^1.2.4",
