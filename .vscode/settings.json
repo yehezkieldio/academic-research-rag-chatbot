@@ -2,6 +2,18 @@
   "typescript.tsdk": "node_modules/typescript/lib",
   "typescript.preferences.importModuleSpecifier": "non-relative",
   "typescript.experimental.useTsgo": true,
+  "typescript.preferences.autoImportFileExcludePatterns": [
+    "next/router",
+    "next/dist",
+    "@radix-ui/react-*",
+    "drizzle-orm/gel-core",
+    "drizzle-orm/mysql-core",
+    "drizzle-orm/sqlite-core",
+    "drizzle-orm/singlestore-core"
+  ],
+  "typescript.preferences.autoImportSpecifierExcludeRegexes": [
+    "^drizzle-orm/(gel-core|mysql-core|sqlite-core|singlestore-core)$"
+  ],
   "editor.formatOnSave": true,
   "editor.codeActionsOnSave": {
     "source.fixAll.biome": "explicit",
