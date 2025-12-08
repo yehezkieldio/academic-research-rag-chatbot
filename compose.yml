@@ -1,0 +1,24 @@
+services:
+  postgres:
+    container_name: academic-paper-rag-postgres
+    image: pgvector/pgvector:pg18
+    environment:
+      POSTGRES_USER: elizielx
+      POSTGRES_PASSWORD: elizielx
+      POSTGRES_DB: academic-paper-rag
+    ports:
+      - "5432:5432"
+    deploy:
+      resources:
+        limits:
+          cpus: "1"
+          memory: 1G
+    volumes:
+      - postgres_data:/var/lib/postgresql
+    networks:
+      - academic-paper-rag-network
+networks:
+  academic-paper-rag-network:
+    driver: bridge
+volumes:
+  postgres_data:
