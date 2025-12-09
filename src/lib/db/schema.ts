@@ -184,3 +184,16 @@ export const statisticalAnalyses = pgTable("statistical_analyses", {
     reportId: text("report_id"),
     createdAt: timestamp("created_at").defaultNow().notNull(),
 });
+
+export type Document = typeof documents.$inferSelect;
+export type NewDocument = typeof documents.$inferInsert;
+export type DocumentChunk = typeof documentChunks.$inferSelect;
+export type NewDocumentChunk = typeof documentChunks.$inferInsert;
+export type ChatSession = typeof chatSessions.$inferSelect;
+export type ChatMessage = typeof chatMessages.$inferSelect;
+export type EvaluationRun = typeof evaluationRuns.$inferSelect;
+export type EvaluationQuestion = typeof evaluationQuestions.$inferSelect;
+export type GuardrailLog = typeof guardrailLogs.$inferSelect;
+export type AgentStep = typeof agentSteps.$inferSelect;
+export type AblationStudy = typeof ablationStudies.$inferSelect;
+export type StatisticalAnalysis = typeof statisticalAnalyses.$inferSelect;
