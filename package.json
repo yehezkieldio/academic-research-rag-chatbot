@@ -20,6 +20,7 @@
   },
   "dependencies": {
     "@ai-sdk/azure": "^2.0.82",
+    "@ai-sdk/react": "^2.0.109",
     "@huggingface/transformers": "^3.8.1",
     "@radix-ui/react-collapsible": "^1.1.12",
     "@radix-ui/react-dialog": "^1.1.15",
@@ -35,6 +36,7 @@
     "ai": "^5.0.108",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
+    "date-fns": "^4.1.0",
     "drizzle-orm": "^0.45.0",
     "gpt-tokenizer": "^3.4.0",
     "lucide-react": "^0.556.0",
@@ -44,6 +46,7 @@
     "postgres": "^3.4.7",
     "react": "19.2.1",
     "react-dom": "19.2.1",
+    "swr": "^2.3.7",
     "tailwind-merge": "^3.4.0",
     "zod": "^4.1.13",
     "zustand": "^5.0.9"
