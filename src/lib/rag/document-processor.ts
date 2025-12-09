@@ -93,15 +93,31 @@ async function createChunkRecords(
     }));
 }
 
-async function insertChunksBatch(chunks: NewDocumentChunk[]): Promise<void> {
+/**
+ * Insert chunks in batches within a transaction context.
+ * @param tx - Transaction instance from db.transaction()
+ * @param chunks - Chunks to insert
+ */
+async function insertChunksBatch(
+    tx: Parameters<Parameters<typeof db.transaction>[0]>[0],
+    chunks: NewDocumentChunk[]
+): Promise<void> {
     const batchSize = 100;
     for (let i = 0; i < chunks.length; i += batchSize) {
         const batch = chunks.slice(i, i + batchSize);
-        await db.insert(documentChunks).values(batch);
+        await tx.insert(documentChunks).values(batch);
     }
 }
 
+/**
+ * Update document status. Can be used with or without a transaction context.
+ * @param txOrDb - Transaction instance or db instance
+ * @param documentId - Document ID to update
+ * @param status - New processing status
+ * @param data - Additional data to update
+ */
 async function updateDocumentStatus(
+    txOrDb: typeof db | Parameters<Parameters<typeof db.transaction>[0]>[0],
     documentId: string,
     status: "processing" | "completed" | "failed",
     data?: { chunkingStrategy?: string; metadata?: Record<string, unknown>; error?: string }
@@ -111,15 +127,28 @@ async function updateDocumentStatus(
     if (data?.metadata) updateData.metadata = data.metadata;
     if (data?.error) updateData.processingError = data.error;
 
-    await db.update(documents).set(updateData).where(eq(documents.id, documentId));
+    await txOrDb.update(documents).set(updateData).where(eq(documents.id, documentId));
 }
 
+/**
+ * Process a document by chunking, embedding, and storing in the database.
+ *
+ * Uses database transactions to ensure atomicity:
+ * - If chunk insertion or status update fails, all changes are rolled back
+ * - Prevents "ghost chunks" from failed processing attempts
+ * - Safe for retry after failure
+ *
+ * @param documentId - The document ID to process
+ * @param options - Processing options (chunking strategy, chunk size, etc.)
+ * @returns Processing result with success status and chunk count
+ */
 export async function processDocument(documentId: string, options: ProcessingOptions = {}): Promise<ProcessingResult> {
     const { chunkingStrategy = "recursive", chunkSize = 1000, chunkOverlap = 200, language = "auto" } = options;
 
-    try {
-        await updateDocumentStatus(documentId, "processing");
+    // Set processing status before transaction (allows visibility of "processing" state)
+    await updateDocumentStatus(db, documentId, "processing");
 
+    try {
         const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
 
         if (!doc?.content) {
@@ -146,25 +175,35 @@ export async function processDocument(documentId: string, options: ProcessingOpt
                       language: detectedLanguage,
                   });
 
-        await insertChunksBatch(await createChunkRecords(documentId, chunks, detectedLanguage, chunkingStrategy));
-
+        // Prepare chunk records outside transaction (embedding generation)
+        const chunkRecords = await createChunkRecords(documentId, chunks, detectedLanguage, chunkingStrategy);
         const universityMetadata = await extractUniversityMetadata(doc.content);
 
-        await updateDocumentStatus(documentId, "completed", {
-            chunkingStrategy,
-            metadata: {
-                ...doc.metadata,
-                wordCount: doc.content.split(" ").filter((w: string) => w.trim().length > 0).length,
-                documentType: universityMetadata.documentType as
-                    | "syllabus"
-                    | "lecture_notes"
-                    | "research_paper"
-                    | "textbook"
-                    | "assignment"
-                    | "other",
-                courseCode: universityMetadata.courseCode || doc.metadata?.courseCode,
-                keywords: universityMetadata.keywords,
-            },
+        // Use transaction for chunk insertion and status update
+        // This ensures atomicity: either all chunks are inserted AND status is updated,
+        // or nothing is changed (automatic rollback on error)
+        await db.transaction(async (tx) => {
+            // Insert all chunks within transaction
+            await insertChunksBatch(tx, chunkRecords);
+
+            // Update document status within same transaction
+            await updateDocumentStatus(tx, documentId, "completed", {
+                chunkingStrategy,
+                metadata: {
+                    ...doc.metadata,
+                    // @ts-expect-error doc.content is possibly null
+                    wordCount: doc.content.split(" ").filter((w: string) => w.trim().length > 0).length,
+                    documentType: universityMetadata.documentType as
+                        | "syllabus"
+                        | "lecture_notes"
+                        | "research_paper"
+                        | "textbook"
+                        | "assignment"
+                        | "other",
+                    courseCode: universityMetadata.courseCode || doc.metadata?.courseCode,
+                    keywords: universityMetadata.keywords,
+                },
+            });
         });
 
         return {
@@ -176,7 +215,8 @@ export async function processDocument(documentId: string, options: ProcessingOpt
         };
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
-        await updateDocumentStatus(documentId, "failed", { error: errorMessage });
+        // Update status to failed (outside transaction since main transaction rolled back)
+        await updateDocumentStatus(db, documentId, "failed", { error: errorMessage });
 
         return {
             success: false,

@@ -125,9 +125,17 @@ Guidelines / Pedoman:
 - Acknowledge uncertainty when information is incomplete / Akui ketidakpastian ketika informasi tidak lengkap
 - Use appropriate academic terminology / Gunakan terminologi akademis yang sesuai
 - Respond in the same language as the query / Jawab dalam bahasa yang sama dengan kueri
-- For complex queries, FIRST use decompose_query, then IMMEDIATELY search for each sub-question
-- After decomposing, you MUST call search_documents for each sub-question before answering
-- Verify important claims with the verify_claim tool / Verifikasi klaim penting dengan alat verify_claim`;
+- Verify important claims with the verify_claim tool / Verifikasi klaim penting dengan alat verify_claim
+
+IMPORTANT - Parallel Tool Execution / Eksekusi Alat Paralel:
+- For complex queries, FIRST use decompose_query to break down the question
+- After decomposing, you MUST call search_documents for ALL sub-questions IN A SINGLE TURN
+- Call multiple search_documents tools simultaneously (in parallel) - DO NOT call them one at a time
+- Example: If you have 3 sub-questions, make 3 search_documents calls in the same response
+- This parallel execution significantly reduces latency and improves response time
+
+Setelah dekomposisi, Anda HARUS memanggil search_documents untuk SEMUA sub-pertanyaan DALAM SATU GILIRAN.
+Panggil beberapa alat search_documents secara bersamaan (paralel) - JANGAN panggil satu per satu.`;
 
 // ==================== Tool Creation Functions ====================
 
@@ -198,8 +206,8 @@ function createDecomposeQueryTool(language: "en" | "id") {
     return tool({
         description:
             language === "id"
-                ? "Uraikan pertanyaan akademis kompleks menjadi sub-pertanyaan yang lebih sederhana. PENTING: Setelah menggunakan tool ini, Anda HARUS segera mencari setiap sub-pertanyaan dengan search_documents."
-                : "Break down a complex academic question into simpler sub-questions. IMPORTANT: After using this tool, you MUST immediately search each sub-question with search_documents.",
+                ? "Uraikan pertanyaan akademis kompleks menjadi sub-pertanyaan yang lebih sederhana. PENTING: Setelah menggunakan tool ini, panggil search_documents untuk SEMUA sub-pertanyaan SECARA BERSAMAAN dalam satu giliran (paralel)."
+                : "Break down a complex academic question into simpler sub-questions. IMPORTANT: After using this tool, call search_documents for ALL sub-questions SIMULTANEOUSLY in a single turn (parallel execution).",
         inputSchema: z.object({
             query: z.string(),
             maxSubQuestions: z.number().min(2).max(5).default(3),
@@ -222,13 +230,13 @@ Return a JSON array of sub-questions only.`,
                     subQuestions,
                     language,
                     nextAction:
-                        "You must now call search_documents for each of these sub-questions before synthesizing an answer.",
+                        "CRITICAL: Call search_documents for ALL sub-questions IN PARALLEL (multiple tool calls in the same response). Do NOT call them one at a time.",
                 };
             } catch {
                 return {
                     subQuestions: [query],
                     language,
-                    nextAction: "You must now call search_documents for this question.",
+                    nextAction: "Call search_documents for this question.",
                 };
             }
         },

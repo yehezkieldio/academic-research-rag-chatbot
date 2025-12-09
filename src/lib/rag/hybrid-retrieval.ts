@@ -1,4 +1,3 @@
-import { cosineSimilarity } from "ai";
 import { and, isNotNull, sql } from "drizzle-orm";
 import { generateEmbedding } from "@/lib/ai/embeddings";
 import { db } from "@/lib/db";
@@ -355,34 +354,75 @@ type ChunkData = {
     documentTitle: string;
 };
 
+/**
+ * Perform vector similarity search using pgvector's native <=> (cosine distance) operator.
+ * This is more efficient than in-memory calculation as it leverages database indexing
+ * and only returns the top-K results directly from the database.
+ *
+ * @param query - The search query string
+ * @param topK - Number of results to return (used for both vector and BM25 candidate pool)
+ * @param language - Language for processing
+ * @returns Ranked results with cosine similarity scores
+ */
 async function performVectorSearch(
     query: string,
-    allChunks: ChunkData[]
-): Promise<{ id: string; rank: number; score: number }[]> {
+    topK: number
+): Promise<{ id: string; rank: number; score: number; chunk: ChunkData }[]> {
     const { embedding: queryEmbedding } = await generateEmbedding(query);
+    const queryVector = `[${queryEmbedding.join(",")}]`;
 
-    return allChunks
-        .map((chunk) => ({
-            id: chunk.chunkId,
-            score: chunk.embedding ? cosineSimilarity(queryEmbedding, chunk.embedding as number[]) : 0,
-            rank: 0,
-        }))
-        .sort((a, b) => b.score - a.score)
-        .map((item, idx) => ({ ...item, rank: idx + 1 }));
+    // Use pgvector's native cosine distance operator (<=>)
+    // Cosine similarity = 1 - cosine distance
+    const results = await db
+        .select({
+            chunkId: documentChunks.id,
+            documentId: documentChunks.documentId,
+            content: documentChunks.content,
+            metadata: documentChunks.metadata,
+            embedding: documentChunks.embedding,
+            documentTitle: documents.title,
+            // Calculate cosine similarity: 1 - cosine_distance
+            vectorScore: sql<number>`1 - (${documentChunks.embedding} <=> ${queryVector}::vector)`,
+        })
+        .from(documentChunks)
+        .innerJoin(documents, sql`${documentChunks.documentId} = ${documents.id}`)
+        .where(and(isNotNull(documentChunks.embedding), sql`${documents.processingStatus} = 'completed'`))
+        .orderBy(sql`${documentChunks.embedding} <=> ${queryVector}::vector`)
+        .limit(topK * 3); // Fetch more candidates for RRF fusion with BM25
+
+    return results.map((row, idx) => ({
+        id: row.chunkId,
+        rank: idx + 1,
+        score: row.vectorScore ?? 0,
+        chunk: {
+            chunkId: row.chunkId,
+            documentId: row.documentId,
+            content: row.content,
+            metadata: row.metadata,
+            embedding: row.embedding as number[] | null,
+            documentTitle: row.documentTitle,
+        },
+    }));
 }
 
+/**
+ * Perform BM25 keyword search on chunks.
+ * Can work on a subset of chunks (from vector search candidates) for efficiency.
+ */
 function performBM25Search(
     query: string,
-    allChunks: ChunkData[],
+    chunks: ChunkData[],
     language: "en" | "id"
 ): { id: string; rank: number; score: number }[] {
+    if (chunks.length === 0) return [];
+
     const queryTerms = tokenize(query, language);
     const queryTermFreqs = getQueryTermFreqs(queryTerms);
     const docFrequencies = new Map<string, number>();
     const docTermsMap = new Map<string, string[]>();
     let totalLength = 0;
 
-    for (const chunk of allChunks) {
+    for (const chunk of chunks) {
         const terms = tokenize(chunk.content, language);
         docTermsMap.set(chunk.chunkId, terms);
         totalLength += terms.length;
@@ -393,9 +433,9 @@ function performBM25Search(
         }
     }
 
-    const avgDocLength = totalLength / allChunks.length;
+    const avgDocLength = totalLength / chunks.length;
 
-    return allChunks
+    return chunks
         .map((chunk) => ({
             id: chunk.chunkId,
             score: calculateOkapiBM25(
@@ -403,7 +443,7 @@ function performBM25Search(
                 docTermsMap.get(chunk.chunkId) || [],
                 avgDocLength,
                 docFrequencies,
-                allChunks.length,
+                chunks.length,
                 queryTermFreqs
             ),
             rank: 0,
@@ -415,11 +455,11 @@ function performBM25Search(
 function combineRankings(
     vectorRanking: { id: string; rank: number; score: number }[],
     bm25Ranking: { id: string; rank: number; score: number }[],
-    allChunks: ChunkData[],
+    _chunkMap: Map<string, ChunkData>,
     strategy: "vector" | "keyword" | "hybrid",
     rrfK: number
 ): Map<string, { vectorScore: number; bm25Score: number; fusedScore: number }> {
-    let finalScores: Map<string, { vectorScore: number; bm25Score: number; fusedScore: number }>;
+    const finalScores = new Map<string, { vectorScore: number; bm25Score: number; fusedScore: number }>();
 
     if (strategy === "hybrid") {
         const fusedScores = reciprocalRankFusion(
@@ -430,19 +470,20 @@ function combineRankings(
             rrfK
         );
 
-        finalScores = new Map();
-        for (const chunk of allChunks) {
-            const vectorItem = vectorRanking.find((r) => r.id === chunk.chunkId);
-            const bm25Item = bm25Ranking.find((r) => r.id === chunk.chunkId);
+        // Combine all unique chunk IDs from both rankings
+        const allIds = new Set([...vectorRanking.map((r) => r.id), ...bm25Ranking.map((r) => r.id)]);
 
-            finalScores.set(chunk.chunkId, {
+        for (const chunkId of allIds) {
+            const vectorItem = vectorRanking.find((r) => r.id === chunkId);
+            const bm25Item = bm25Ranking.find((r) => r.id === chunkId);
+
+            finalScores.set(chunkId, {
                 vectorScore: vectorItem?.score || 0,
                 bm25Score: bm25Item?.score || 0,
-                fusedScore: fusedScores.get(chunk.chunkId) || 0,
+                fusedScore: fusedScores.get(chunkId) || 0,
             });
         }
     } else if (strategy === "vector") {
-        finalScores = new Map();
         for (const item of vectorRanking) {
             finalScores.set(item.id, {
                 vectorScore: item.score,
@@ -451,7 +492,6 @@ function combineRankings(
             });
         }
     } else {
-        finalScores = new Map();
         const maxBM25 = Math.max(...bm25Ranking.map((r) => r.score), 1);
         for (const item of bm25Ranking) {
             finalScores.set(item.id, {
@@ -466,15 +506,15 @@ function combineRankings(
 }
 
 function buildResults(
-    allChunks: ChunkData[],
+    chunkMap: Map<string, ChunkData>,
     finalScores: Map<string, { vectorScore: number; bm25Score: number; fusedScore: number }>,
     strategy: "vector" | "keyword" | "hybrid"
 ): RetrievalResult[] {
     const results: RetrievalResult[] = [];
 
-    for (const chunk of allChunks) {
-        const scores = finalScores.get(chunk.chunkId);
-        if (!scores) continue;
+    for (const [chunkId, scores] of finalScores) {
+        const chunk = chunkMap.get(chunkId);
+        if (!chunk) continue;
 
         results.push({
             chunkId: chunk.chunkId,
@@ -492,41 +532,95 @@ function buildResults(
     return results;
 }
 
+/**
+ * Perform hybrid retrieval using pgvector for vector search and BM25 for keyword search.
+ *
+ * Optimization: Uses pgvector's native <=> operator for efficient database-level vector search
+ * instead of fetching all chunks and computing cosine similarity in-memory.
+ *
+ * For "hybrid" strategy:
+ * 1. Vector search returns top-K*3 candidates using pgvector SQL
+ * 2. BM25 is computed on the candidate pool (not all documents)
+ * 3. Results are fused using Reciprocal Rank Fusion (RRF)
+ *
+ * This approach is compliant with research constraints in README.md and scales
+ * efficiently for large document collections.
+ */
 export async function hybridRetrieve(query: string, options: HybridRetrievalOptions = {}): Promise<RetrievalResult[]> {
     console.time("Hybrid_Retrieval");
     const opts = { ...DEFAULT_OPTIONS, ...options };
 
-    const allChunks = await db
-        .select({
-            chunkId: documentChunks.id,
-            documentId: documentChunks.documentId,
-            content: documentChunks.content,
-            metadata: documentChunks.metadata,
-            embedding: documentChunks.embedding,
-            documentTitle: documents.title,
-        })
-        .from(documentChunks)
-        .innerJoin(documents, sql`${documentChunks.documentId} = ${documents.id}`)
-        .where(and(isNotNull(documentChunks.embedding), sql`${documents.processingStatus} = 'completed'`));
+    // Build a map to store chunk data for efficient lookup
+    const chunkMap = new Map<string, ChunkData>();
 
-    if (allChunks.length === 0) {
-        return [];
-    }
+    const vectorRankingResults: { id: string; rank: number; score: number }[] = [];
+    const bm25RankingResults: { id: string; rank: number; score: number }[] = [];
+    let detectedLanguage: "en" | "id" = "en";
 
-    const language = opts.language === "auto" ? detectLanguage(`${query} ${allChunks[0].content}`) : opts.language;
-
-    let vectorRanking: { id: string; rank: number; score: number }[] = [];
     if (opts.strategy === "vector" || opts.strategy === "hybrid") {
-        vectorRanking = await performVectorSearch(query, allChunks);
+        // Use pgvector SQL for efficient vector search
+        const vectorResults = await performVectorSearch(query, opts.topK);
+
+        if (vectorResults.length === 0) {
+            console.timeEnd("Hybrid_Retrieval");
+            return [];
+        }
+
+        // Populate chunk map and vector ranking
+        for (const result of vectorResults) {
+            chunkMap.set(result.id, result.chunk);
+            vectorRankingResults.push({ id: result.id, rank: result.rank, score: result.score });
+        }
+
+        // Detect language from first chunk if auto
+        detectedLanguage =
+            opts.language === "auto" ? detectLanguage(`${query} ${vectorResults[0].chunk.content}`) : opts.language;
     }
 
-    let bm25Ranking: { id: string; rank: number; score: number }[] = [];
+    if (opts.strategy === "keyword") {
+        // For keyword-only strategy, fetch chunks for BM25
+        const allChunks = await db
+            .select({
+                chunkId: documentChunks.id,
+                documentId: documentChunks.documentId,
+                content: documentChunks.content,
+                metadata: documentChunks.metadata,
+                embedding: documentChunks.embedding,
+                documentTitle: documents.title,
+            })
+            .from(documentChunks)
+            .innerJoin(documents, sql`${documentChunks.documentId} = ${documents.id}`)
+            .where(sql`${documents.processingStatus} = 'completed'`)
+            .limit(opts.topK * 10); // Limit for performance
+
+        if (allChunks.length === 0) {
+            console.timeEnd("Hybrid_Retrieval");
+            return [];
+        }
+
+        for (const chunk of allChunks) {
+            chunkMap.set(chunk.chunkId, {
+                chunkId: chunk.chunkId,
+                documentId: chunk.documentId,
+                content: chunk.content,
+                metadata: chunk.metadata,
+                embedding: chunk.embedding as number[] | null,
+                documentTitle: chunk.documentTitle,
+            });
+        }
+
+        detectedLanguage =
+            opts.language === "auto" ? detectLanguage(`${query} ${allChunks[0].content}`) : opts.language;
+    }
+
+    // Perform BM25 search on candidate chunks
     if (opts.strategy === "keyword" || opts.strategy === "hybrid") {
-        bm25Ranking = performBM25Search(query, allChunks, language);
+        const chunksForBM25 = Array.from(chunkMap.values());
+        bm25RankingResults.push(...performBM25Search(query, chunksForBM25, detectedLanguage));
     }
 
-    const finalScores = combineRankings(vectorRanking, bm25Ranking, allChunks, opts.strategy, opts.rrfK);
-    const results = buildResults(allChunks, finalScores, opts.strategy);
+    const finalScores = combineRankings(vectorRankingResults, bm25RankingResults, chunkMap, opts.strategy, opts.rrfK);
+    const results = buildResults(chunkMap, finalScores, opts.strategy);
 
     console.timeEnd("Hybrid_Retrieval");
     return results

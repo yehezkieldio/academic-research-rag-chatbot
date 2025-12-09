@@ -35,8 +35,22 @@ export interface RerankedResult extends RetrievalResult {
     rerankerReasoning?: string;
 }
 
+/**
+ * Default reranker options.
+ *
+ * Strategy choices:
+ * - "cross_encoder" (default): Fast TinyBERT-based scoring (~100ms). Recommended for production.
+ * - "llm": LLM-based pointwise scoring. Higher quality but slower (~3-5s per query).
+ * - "llm_listwise": Single LLM call to rank all documents. Best for Agentic mode.
+ * - "cohere": Pairwise comparison style. Experimental.
+ * - "ensemble": Combines cross_encoder + llm_listwise. Highest quality but slowest.
+ * - "none": No reranking, use original retrieval scores.
+ *
+ * Production recommendation: Use "cross_encoder" for low latency.
+ * Agentic mode recommendation: Use "llm_listwise" or "ensemble" for better relevance.
+ */
 const DEFAULT_OPTIONS: RerankerOptions = {
-    strategy: "ensemble",
+    strategy: "cross_encoder", // Changed from "ensemble" for production performance
     topK: 5,
     minScore: 0.3,
     language: "auto",
@@ -48,7 +62,7 @@ const DEFAULT_OPTIONS: RerankerOptions = {
     },
 };
 
-// @ts-expect-error: xpression produces a union type that is too complex to represent.
+// @ts-expect-error: expression produces a union type that is too complex to represent.
 let crossEncoderPipeline: Awaited<ReturnType<typeof pipeline>> | null = null;
 
 async function getCrossEncoderPipeline() {
