@@ -493,6 +493,7 @@ function buildResults(
 }
 
 export async function hybridRetrieve(query: string, options: HybridRetrievalOptions = {}): Promise<RetrievalResult[]> {
+    console.time("Hybrid_Retrieval");
     const opts = { ...DEFAULT_OPTIONS, ...options };
 
     const allChunks = await db
@@ -527,6 +528,7 @@ export async function hybridRetrieve(query: string, options: HybridRetrievalOpti
     const finalScores = combineRankings(vectorRanking, bm25Ranking, allChunks, opts.strategy, opts.rrfK);
     const results = buildResults(allChunks, finalScores, opts.strategy);
 
+    console.timeEnd("Hybrid_Retrieval");
     return results
         .sort((a, b) => b.fusedScore - a.fusedScore)
         .filter((r) => r.fusedScore >= opts.minScore)
