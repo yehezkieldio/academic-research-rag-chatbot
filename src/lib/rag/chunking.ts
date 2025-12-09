@@ -32,6 +32,8 @@ export interface Chunk {
         childChunkIds?: string[];
         sentenceWindowContext?: string;
         semanticScore?: number;
+        activeHeading?: string;
+        offsetSafetyWarning?: boolean;
     };
 }
 
@@ -120,7 +122,6 @@ export async function chunkDocument(text: string, options: ChunkOptions = {}): P
     }
 }
 
-// Recursive text splitting (original, enhanced)
 export function recursiveChunking(text: string, options: ChunkOptions = {}): Chunk[] {
     const opts = { ...DEFAULT_OPTIONS, ...options };
     const chunks: Chunk[] = [];
@@ -194,42 +195,58 @@ export function recursiveChunking(text: string, options: ChunkOptions = {}): Chu
     return chunks;
 }
 
+interface SemanticChunkMeta {
+    startOffset: number;
+    endOffset: number;
+    offsetWarning: boolean;
+}
+
+function createSemanticChunk(
+    content: string,
+    index: number,
+    offsets: SemanticChunkMeta,
+    semanticScore: number,
+    activeHeading: string | undefined
+): Chunk {
+    return {
+        content,
+        index,
+        startOffset: offsets.startOffset,
+        endOffset: offsets.endOffset,
+        metadata: {
+            chunkingStrategy: "semantic",
+            semanticScore,
+            activeHeading,
+            offsetSafetyWarning: offsets.offsetWarning,
+        },
+    };
+}
+
 // Semantic chunking - splits based on topic/meaning changes
 export async function semanticChunking(text: string, options: ChunkOptions = {}): Promise<Chunk[]> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
-    const chunks: Chunk[] = [];
-
-    // First, split into sentences
     const sentences = splitIntoSentences(text);
     if (sentences.length === 0) return [];
 
-    // Generate embeddings for each sentence (batch for efficiency)
-    const embeddings: number[][] = [];
-    for (const sentence of sentences) {
-        try {
-            const { embedding } = await generateEmbedding(sentence);
-            embeddings.push(embedding);
-        } catch {
-            // Use zero vector as fallback
-            embeddings.push(new Array(1536).fill(0));
-        }
-    }
+    // Batch generate embeddings to avoid N+1 problem
+    const embeddings = await batchGenerateEmbeddings(sentences);
 
     // Find semantic breakpoints
     const breakpoints: number[] = [0];
-
     for (let i = 1; i < sentences.length; i++) {
         const similarity = cosineSimilarity(embeddings[i - 1], embeddings[i]);
-
-        // If similarity is below threshold, it's a potential breakpoint
         if (similarity < opts.semanticThreshold) {
             breakpoints.push(i);
         }
     }
     breakpoints.push(sentences.length);
 
-    // Create chunks from breakpoints
+    // Extract headings with offsets for context awareness
+    const headingsWithOffsets = extractHeadingsWithOffsets(text);
+    const chunks: Chunk[] = [];
     let currentOffset = 0;
+
+    // Create chunks from breakpoints
     for (let i = 0; i < breakpoints.length - 1; i++) {
         const start = breakpoints[i];
         const end = breakpoints[i + 1];
@@ -237,7 +254,8 @@ export async function semanticChunking(text: string, options: ChunkOptions = {})
         const content = chunkSentences.join(" ").trim();
 
         if (content.length >= opts.minChunkSize) {
-            const startOffset = text.indexOf(content, currentOffset);
+            const { startOffset, offsetWarning } = safeOffsetTracking(text, content, currentOffset, currentOffset);
+            const endOffset = startOffset >= 0 ? startOffset + content.length : currentOffset + content.length;
 
             // Calculate average semantic coherence score
             let avgSimilarity = 1;
@@ -249,18 +267,18 @@ export async function semanticChunking(text: string, options: ChunkOptions = {})
                 avgSimilarity = totalSim / (end - start - 1);
             }
 
-            chunks.push({
-                content,
-                index: chunks.length,
-                startOffset: startOffset >= 0 ? startOffset : currentOffset,
-                endOffset: startOffset >= 0 ? startOffset + content.length : currentOffset + content.length,
-                metadata: {
-                    chunkingStrategy: "semantic",
-                    semanticScore: avgSimilarity,
-                },
-            });
+            const activeHeading = findActiveHeading(startOffset, headingsWithOffsets);
+            chunks.push(
+                createSemanticChunk(
+                    content,
+                    chunks.length,
+                    { startOffset, endOffset, offsetWarning },
+                    avgSimilarity,
+                    activeHeading
+                )
+            );
 
-            currentOffset = startOffset >= 0 ? startOffset + content.length : currentOffset + content.length;
+            currentOffset = endOffset;
         }
     }
 
@@ -389,6 +407,100 @@ export function hierarchicalChunking(text: string, options: ChunkOptions = {}, l
     return chunks;
 }
 
+async function batchGenerateEmbeddings(sentences: string[]): Promise<number[][]> {
+    const embeddings: number[][] = [];
+
+    try {
+        const batchResults = await Promise.all(
+            sentences.map((sentence) =>
+                generateEmbedding(sentence).catch(() => ({
+                    embedding: new Array(1536).fill(0),
+                }))
+            )
+        );
+
+        for (const result of batchResults) {
+            embeddings.push(result.embedding);
+        }
+    } catch {
+        for (const sentence of sentences) {
+            embeddings.push(new Array(1536).fill(0));
+        }
+    }
+
+    return embeddings;
+}
+
+function extractHeadingsWithOffsets(text: string): Array<{ heading: string; offset: number }> {
+    const headingsWithOffsets: Array<{ heading: string; offset: number }> = [];
+
+    const headingPatterns = [
+        /^#{1,6}\s+(.+)$/gm,
+        /^(.+)\n[=]+$/gm,
+        /^(.+)\n[-]+$/gm,
+        /^[A-Z][A-Z\s]+:?$/gm,
+        /^\d+\.\s+[A-Z][^.]+$/gm,
+        /^(?:Chapter|Section|Part)\s+\d+/gim,
+        /^(?:BAB|Bab)\s+[IVXLCDMivxlcdm]+/gm,
+        /^(?:Abstract|Abstrak|Introduction|Pendahuluan|Conclusion|Kesimpulan|References|Daftar Pustaka)/gim,
+    ];
+
+    for (const pattern of headingPatterns) {
+        pattern.lastIndex = 0;
+        // eslint-disable-next-line no-cond-assign
+        for (let match = pattern.exec(text); match !== null; match = pattern.exec(text)) {
+            const heading = (match[1] || match[0]).trim();
+            if (heading && !headingsWithOffsets.some((h) => h.heading === heading)) {
+                headingsWithOffsets.push({
+                    heading,
+                    offset: match.index,
+                });
+            }
+        }
+    }
+
+    return headingsWithOffsets.sort((a, b) => a.offset - b.offset);
+}
+
+function findActiveHeading(
+    offset: number,
+    headingsWithOffsets: Array<{ heading: string; offset: number }>
+): string | undefined {
+    let activeHeading: string | undefined;
+
+    for (const { heading, offset: hOffset } of headingsWithOffsets) {
+        if (hOffset <= offset) {
+            activeHeading = heading;
+        } else {
+            break;
+        }
+    }
+
+    return activeHeading;
+}
+
+function safeOffsetTracking(
+    text: string,
+    content: string,
+    searchStartOffset: number,
+    lastFoundOffset: number
+): { startOffset: number; offsetWarning: boolean } {
+    const foundIndex = text.indexOf(content, searchStartOffset);
+    const startOffset = foundIndex >= 0 ? foundIndex : lastFoundOffset + content.length;
+
+    const offsetJump = Math.abs(startOffset - lastFoundOffset);
+    const offsetWarning = offsetJump > 2000 && foundIndex >= 0;
+
+    if (offsetWarning) {
+        console.warn(
+            `[Offset Safety] Unexpected jump of ${offsetJump} chars at index ~${startOffset}. ` +
+                `This may indicate duplicate content or text modification. Content: ${content.slice(0, 50)}...`
+        );
+    }
+
+    return { startOffset, offsetWarning };
+}
+
 // Helper: Split text into sentences
 function splitIntoSentences(text: string): string[] {
     // Handle academic text patterns
@@ -457,6 +569,7 @@ function detectChunkingLanguage(text: string): "en" | "id" {
 export function enhanceForAcademic(chunks: Chunk[], originalText: string): Chunk[] {
     const language = detectChunkingLanguage(originalText);
     const sectionPatterns = language === "id" ? ID_SECTION_PATTERNS : EN_SECTION_PATTERNS;
+    const headingsWithOffsets = extractHeadingsWithOffsets(originalText);
 
     return chunks.map((chunk) => {
         const enhanced = { ...chunk };
@@ -466,6 +579,15 @@ export function enhanceForAcademic(chunks: Chunk[], originalText: string): Chunk
             enhanced.metadata = {
                 ...enhanced.metadata,
                 headings,
+            };
+        }
+
+        // Add active heading context from document structure
+        const activeHeading = findActiveHeading(chunk.startOffset, headingsWithOffsets);
+        if (activeHeading && !enhanced.metadata?.activeHeading) {
+            enhanced.metadata = {
+                ...enhanced.metadata,
+                activeHeading,
             };
         }
 
