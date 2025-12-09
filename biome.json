@@ -35,6 +35,7 @@
       },
       "suspicious": {
         "noConsole": "off",
+        "noAlert": "off",
         "noEmptyBlockStatements": "off"
       },
       "style": {
