@@ -197,10 +197,17 @@ function detectLanguage(text: string): "en" | "id" {
 // Core RAGAS Metrics
 
 export async function calculateFaithfulness(answer: string, contexts: string[]): Promise<number> {
-    if (!answer || contexts.length === 0) return 0;
+    console.log(
+        `[calculateFaithfulness] Calculating faithfulness - answer: ${answer.length} chars, contexts: ${contexts.length}`
+    );
+    if (!answer || contexts.length === 0) {
+        console.log("[calculateFaithfulness] Skipping - empty answer or contexts");
+        return 0;
+    }
 
     try {
         const language = detectLanguage(answer + contexts.join(" "));
+        console.log(`[calculateFaithfulness] Language: ${language}`);
         const prompt =
             language === "id"
                 ? `Anda mengevaluasi kesetiaan jawaban terhadap konteks sumbernya.
@@ -235,9 +242,11 @@ Respond with ONLY a number between 0 and 1 representing the faithfulness score.
         });
 
         const score = Number.parseFloat(text.trim());
-        return Number.isNaN(score) ? 0 : Math.min(1, Math.max(0, score));
+        const result = Number.isNaN(score) ? 0 : Math.min(1, Math.max(0, score));
+        console.log(`[calculateFaithfulness] Result: ${result.toFixed(3)}`);
+        return result;
     } catch (error) {
-        console.error("Faithfulness calculation error:", error);
+        console.error("[calculateFaithfulness] Calculation error:", error);
         return 0;
     }
 }
@@ -799,6 +808,9 @@ export async function calculateAllMetrics(
     domain?: string,
     latencyTracker?: ReturnType<typeof createLatencyTracker>
 ): Promise<EvaluationMetrics> {
+    console.log(
+        `[calculateAllMetrics] Starting metric calculation - question: "${question.substring(0, 60)}...", answer length: ${answer.length}`
+    );
     const [
         // Core RAGAS
         faithfulness,
@@ -830,10 +842,17 @@ export async function calculateAllMetrics(
         calculateContradictionScore(answer, contexts),
     ]);
 
+    console.log(
+        `[calculateAllMetrics] Core metrics calculated - faithfulness: ${faithfulness.toFixed(3)}, relevancy: ${answerRelevancy.toFixed(3)}`
+    );
+
     // Calculate retrieval metrics if IDs provided
     const retrievalNdcg = retrievedIds && relevantIds ? calculateNDCG(retrievedIds, relevantIds) : 0;
     const retrievalMrr = retrievedIds && relevantIds ? calculateMRR(retrievedIds, relevantIds) : 0;
     const retrievalPrecision = retrievedIds && relevantIds ? calculateRetrievalPrecision(retrievedIds, relevantIds) : 0;
+    console.log(
+        `[calculateAllMetrics] Retrieval metrics - NDCG: ${retrievalNdcg.toFixed(3)}, MRR: ${retrievalMrr.toFixed(3)}, Precision: ${retrievalPrecision.toFixed(3)}`
+    );
 
     // Get latency & token metrics using a helper to keep this function compact
     const {
@@ -850,6 +869,10 @@ export async function calculateAllMetrics(
         tokensPerSecond,
         tokenEfficiency,
     } = aggregateLatencyAndTokenMetrics(latencyTracker, answer, contexts);
+
+    console.log(
+        `[calculateAllMetrics] Latency metrics - total: ${totalLatencyMs}ms, generation: ${generationLatencyMs}ms, hallucination rate: ${hallucinationRate.toFixed(3)}`
+    );
 
     return {
         faithfulness,

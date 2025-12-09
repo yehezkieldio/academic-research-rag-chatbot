@@ -151,22 +151,33 @@ function createSearchTool(language: "en" | "id", streamingState?: StreamingState
             topK: z.number().min(1).max(20).default(5),
         }),
         execute: async ({ query, strategy, topK }) => {
+            console.log(
+                `[searchTool] Executing search - query: "${query.substring(0, 80)}...", strategy: ${strategy}, topK: ${topK}`
+            );
             const results = await hybridRetrieve(query, {
                 strategy,
                 topK,
                 language,
             });
+            console.log(
+                `[searchTool] Retrieved ${results.length} results with average score ${(results.reduce((sum, r) => sum + r.fusedScore, 0) / results.length).toFixed(3)}`
+            );
 
             // Add to streaming state if available
             if (streamingState) {
+                let newChunks = 0;
                 for (const result of results) {
                     // Avoid duplicates
                     const exists = streamingState.retrievedChunks.some((c) => c.chunkId === result.chunkId);
                     if (!exists) {
                         streamingState.retrievedChunks.push(result);
                         streamingState.citationManager.assignCitation(result.chunkId);
+                        newChunks += 1;
                     }
                 }
+                console.log(
+                    `[searchTool] Added ${newChunks} new chunks to streaming state (total: ${streamingState.retrievedChunks.length})`
+                );
             }
 
             return {
@@ -342,14 +353,25 @@ export async function runAgenticRag(
         streamCallback,
     } = options;
 
+    console.log(
+        `[runAgenticRag] Starting agentic RAG pipeline - sessionId: ${sessionId}, strategy: ${retrievalStrategy}, guardrails: ${enableGuardrails}`
+    );
+    console.log(`[runAgenticRag] Query: ${query.substring(0, 100)}...`);
+
     const startTime = Date.now();
     const language = detectQueryLanguage(query);
     const streamingState = getOrCreateStreamingState(sessionId);
+    console.log(`[runAgenticRag] Detected language: ${language}`);
 
     // Validate input
+    console.log(`[runAgenticRag] Starting input validation with guardrails enabled: ${enableGuardrails}`);
     const { passed, steps, guardrailResults } = await validateInputWithGuardrails(query, enableGuardrails);
+    console.log(
+        `[runAgenticRag] Input validation result: passed=${passed}, violations=${guardrailResults.input?.violations.length || 0}`
+    );
 
     if (!passed) {
+        console.warn("[runAgenticRag] Input validation failed - returning early with policy violation message");
         return {
             answer:
                 language === "id"
@@ -368,6 +390,7 @@ export async function runAgenticRag(
     const agentTools = createAgentTools(language, streamingState);
 
     try {
+        console.log(`[runAgenticRag] Executing agent workflow with maxSteps: ${maxSteps}`);
         const result = await executeAgentWorkflow(
             query,
             language,
@@ -378,6 +401,9 @@ export async function runAgenticRag(
             retrievalStrategy,
             steps,
             streamCallback
+        );
+        console.log(
+            `[runAgenticRag] Agent workflow completed - steps: ${steps.length}, retrieved chunks: ${streamingState.retrievedChunks.length}`
         );
 
         // Validate output
@@ -390,6 +416,12 @@ export async function runAgenticRag(
         }
 
         calculateStepDurations(steps);
+        const totalLatencyMs = Date.now() - startTime;
+
+        console.log(`[runAgenticRag] Pipeline completed successfully in ${totalLatencyMs}ms`);
+        console.log(
+            `[runAgenticRag] Answer length: ${result.text.length}, citations: ${streamingState.citationManager.getCitations().length}`
+        );
 
         return {
             answer: result.text,
@@ -398,10 +430,11 @@ export async function runAgenticRag(
             citations: streamingState.citationManager.getCitations(),
             guardrailResults,
             language,
-            totalLatencyMs: Date.now() - startTime,
+            totalLatencyMs,
             reasoning: result.reasoning?.map((r) => r.text) || undefined,
         };
     } catch (error) {
+        console.error("[runAgenticRag] Error in agent workflow:", error);
         return handleAgentError(error, language, steps, streamingState, guardrailResults, startTime);
     }
 }
@@ -495,11 +528,18 @@ function processStepFinish(
     streamCallback?: (step: AgentStep) => void
 ): void {
     const { text, toolCalls, toolResults, finishReason, usage } = stepResult;
+    console.log(
+        `[processStepFinish] Processing step - finishReason: ${finishReason}, toolCalls: ${toolCalls?.length || 0}, tokens: ${usage?.totalTokens || 0}`
+    );
 
     // Record tool calls
     if (toolCalls && toolCalls.length > 0) {
+        console.log(`[processStepFinish] Recording ${toolCalls.length} tool calls`);
         for (const call of toolCalls) {
             const toolResult = toolResults?.find((r) => r.toolCallId === call.toolCallId);
+            console.log(
+                `[processStepFinish] Tool: ${call.toolName} - input: ${JSON.stringify(call.input).substring(0, 100)}...`
+            );
             const agentStep: AgentStep = {
                 stepIndex: steps.length,
                 stepType: "tool_call",

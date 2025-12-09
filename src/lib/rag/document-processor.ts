@@ -145,18 +145,29 @@ async function updateDocumentStatus(
 export async function processDocument(documentId: string, options: ProcessingOptions = {}): Promise<ProcessingResult> {
     const { chunkingStrategy = "recursive", chunkSize = 1000, chunkOverlap = 200, language = "auto" } = options;
 
+    console.log(`[processDocument] Starting document processing - documentId: ${documentId}`);
+    console.log(
+        `[processDocument] Options: strategy=${chunkingStrategy}, chunkSize=${chunkSize}, overlap=${chunkOverlap}, language=${language}`
+    );
+
     // Set processing status before transaction (allows visibility of "processing" state)
     await updateDocumentStatus(db, documentId, "processing");
+    console.log(`[processDocument] Document status set to 'processing'`);
 
     try {
         const [doc] = await db.select().from(documents).where(eq(documents.id, documentId)).limit(1);
 
         if (!doc?.content) {
-            throw new Error(doc ? "Document has no content to process" : "Document not found");
+            const errorMsg = doc ? "Document has no content to process" : "Document not found";
+            console.warn(`[processDocument] ${errorMsg} - documentId: ${documentId}`);
+            throw new Error(errorMsg);
         }
 
+        console.log(`[processDocument] Document found - title: ${doc.title}, contentLength: ${doc.content.length}`);
         const detectedLanguage = language === "auto" ? detectDocumentLanguage(doc.content) : language;
+        console.log(`[processDocument] Detected language: ${detectedLanguage}`);
 
+        console.log(`[processDocument] Starting chunking with strategy: ${chunkingStrategy}`);
         const chunks =
             chunkingStrategy === "semantic"
                 ? await chunkDocument(doc.content, {
@@ -174,17 +185,24 @@ export async function processDocument(documentId: string, options: ProcessingOpt
                       levels: 2,
                       language: detectedLanguage,
                   });
+        console.log(`[processDocument] Chunking complete - chunks created: ${chunks.length}`);
 
         // Prepare chunk records outside transaction (embedding generation)
+        console.log(`[processDocument] Generating embeddings for ${chunks.length} chunks`);
         const chunkRecords = await createChunkRecords(documentId, chunks, detectedLanguage, chunkingStrategy);
+        console.log(`[processDocument] Chunk records prepared - total: ${chunkRecords.length}`);
+
         const universityMetadata = await extractUniversityMetadata(doc.content);
+        console.log(`[processDocument] University metadata extracted - type: ${universityMetadata.documentType}`);
 
         // Use transaction for chunk insertion and status update
         // This ensures atomicity: either all chunks are inserted AND status is updated,
         // or nothing is changed (automatic rollback on error)
+        console.log("[processDocument] Starting database transaction for chunk insertion and status update");
         await db.transaction(async (tx) => {
             // Insert all chunks within transaction
             await insertChunksBatch(tx, chunkRecords);
+            console.log("[processDocument] All chunks inserted in batch");
 
             // Update document status within same transaction
             await updateDocumentStatus(tx, documentId, "completed", {
@@ -204,8 +222,10 @@ export async function processDocument(documentId: string, options: ProcessingOpt
                     keywords: universityMetadata.keywords,
                 },
             });
+            console.log("[processDocument] Document status updated to 'completed'");
         });
 
+        console.log("[processDocument] Document processing completed successfully");
         return {
             success: true,
             documentId,
@@ -215,8 +235,10 @@ export async function processDocument(documentId: string, options: ProcessingOpt
         };
     } catch (error) {
         const errorMessage = error instanceof Error ? error.message : "Unknown error";
+        console.error(`[processDocument] Error during processing: ${errorMessage}`);
         // Update status to failed (outside transaction since main transaction rolled back)
         await updateDocumentStatus(db, documentId, "failed", { error: errorMessage });
+        console.log(`[processDocument] Document status set to 'failed' with error: ${errorMessage}`);
 
         return {
             success: false,

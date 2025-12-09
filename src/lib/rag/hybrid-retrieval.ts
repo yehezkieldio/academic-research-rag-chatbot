@@ -414,9 +414,16 @@ function performBM25Search(
     chunks: ChunkData[],
     language: "en" | "id"
 ): { id: string; rank: number; score: number }[] {
-    if (chunks.length === 0) return [];
+    if (chunks.length === 0) {
+        console.log("[performBM25Search] No chunks provided for BM25 search");
+        return [];
+    }
 
+    console.log(`[performBM25Search] Starting BM25 search on ${chunks.length} chunks, language: ${language}`);
     const queryTerms = tokenize(query, language);
+    console.log(
+        `[performBM25Search] Query terms after tokenization (${queryTerms.length}): ${queryTerms.slice(0, 5).join(", ")}...`
+    );
     const queryTermFreqs = getQueryTermFreqs(queryTerms);
     const docFrequencies = new Map<string, number>();
     const docTermsMap = new Map<string, string[]>();
@@ -434,8 +441,11 @@ function performBM25Search(
     }
 
     const avgDocLength = totalLength / chunks.length;
+    console.log(
+        `[performBM25Search] Avg doc length: ${avgDocLength.toFixed(2)}, total unique terms: ${docFrequencies.size}`
+    );
 
-    return chunks
+    const scored = chunks
         .map((chunk) => ({
             id: chunk.chunkId,
             score: calculateOkapiBM25(
@@ -450,6 +460,9 @@ function performBM25Search(
         }))
         .sort((a, b) => b.score - a.score)
         .map((item, idx) => ({ ...item, rank: idx + 1 }));
+
+    console.log(`[performBM25Search] BM25 scoring complete, top score: ${scored[0]?.score.toFixed(3) || "N/A"}`);
+    return scored;
 }
 
 function combineRankings(
@@ -547,8 +560,12 @@ function buildResults(
  * efficiently for large document collections.
  */
 export async function hybridRetrieve(query: string, options: HybridRetrievalOptions = {}): Promise<RetrievalResult[]> {
+    console.log("[hybridRetrieve] Starting hybrid retrieval pipeline");
     console.time("Hybrid_Retrieval");
     const opts = { ...DEFAULT_OPTIONS, ...options };
+    console.log(
+        `[hybridRetrieve] Options - strategy: ${opts.strategy}, topK: ${opts.topK}, language: ${opts.language}`
+    );
 
     // Build a map to store chunk data for efficient lookup
     const chunkMap = new Map<string, ChunkData>();
@@ -559,9 +576,12 @@ export async function hybridRetrieve(query: string, options: HybridRetrievalOpti
 
     if (opts.strategy === "vector" || opts.strategy === "hybrid") {
         // Use pgvector SQL for efficient vector search
+        console.log("[hybridRetrieve] Performing vector search");
         const vectorResults = await performVectorSearch(query, opts.topK);
+        console.log(`[hybridRetrieve] Vector search returned ${vectorResults.length} results`);
 
         if (vectorResults.length === 0) {
+            console.log("[hybridRetrieve] No vector results found");
             console.timeEnd("Hybrid_Retrieval");
             return [];
         }
@@ -575,10 +595,12 @@ export async function hybridRetrieve(query: string, options: HybridRetrievalOpti
         // Detect language from first chunk if auto
         detectedLanguage =
             opts.language === "auto" ? detectLanguage(`${query} ${vectorResults[0].chunk.content}`) : opts.language;
+        console.log(`[hybridRetrieve] Detected language: ${detectedLanguage}`);
     }
 
     if (opts.strategy === "keyword") {
         // For keyword-only strategy, fetch chunks for BM25
+        console.log("[hybridRetrieve] Performing keyword search (BM25 only)");
         const allChunks = await db
             .select({
                 chunkId: documentChunks.id,
@@ -593,7 +615,10 @@ export async function hybridRetrieve(query: string, options: HybridRetrievalOpti
             .where(sql`${documents.processingStatus} = 'completed'`)
             .limit(opts.topK * 10); // Limit for performance
 
+        console.log(`[hybridRetrieve] Fetched ${allChunks.length} chunks for BM25 search`);
+
         if (allChunks.length === 0) {
+            console.log("[hybridRetrieve] No chunks found for BM25");
             console.timeEnd("Hybrid_Retrieval");
             return [];
         }
@@ -615,18 +640,26 @@ export async function hybridRetrieve(query: string, options: HybridRetrievalOpti
 
     // Perform BM25 search on candidate chunks
     if (opts.strategy === "keyword" || opts.strategy === "hybrid") {
+        console.log("[hybridRetrieve] Performing BM25 search");
         const chunksForBM25 = Array.from(chunkMap.values());
         bm25RankingResults.push(...performBM25Search(query, chunksForBM25, detectedLanguage));
+        console.log(`[hybridRetrieve] BM25 search returned ${bm25RankingResults.length} results`);
     }
 
     const finalScores = combineRankings(vectorRankingResults, bm25RankingResults, chunkMap, opts.strategy, opts.rrfK);
+    console.log(`[hybridRetrieve] Combined rankings - total unique results: ${finalScores.size}`);
     const results = buildResults(chunkMap, finalScores, opts.strategy);
 
-    console.timeEnd("Hybrid_Retrieval");
-    return results
+    const finalResults = results
         .sort((a, b) => b.fusedScore - a.fusedScore)
         .filter((r) => r.fusedScore >= opts.minScore)
         .slice(0, opts.topK);
+
+    console.log(
+        `[hybridRetrieve] Final results: ${finalResults.length} (min score: ${opts.minScore}, topK: ${opts.topK})`
+    );
+    console.timeEnd("Hybrid_Retrieval");
+    return finalResults;
 }
 
 export function extractKeywords(text: string, options: ExtractKeywordsOptions = {}): string[] {

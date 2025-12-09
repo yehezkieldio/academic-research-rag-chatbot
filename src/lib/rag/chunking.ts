@@ -103,27 +103,48 @@ const ID_SECTION_PATTERNS = {
 // Main chunking function
 export async function chunkDocument(text: string, options: ChunkOptions = {}): Promise<Chunk[]> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
+    console.log(
+        `[chunkDocument] Starting chunking - strategy: ${opts.strategy}, chunkSize: ${opts.chunkSize}, text length: ${text.length}`
+    );
 
     const language = opts.language === "auto" || !opts.language ? detectChunkingLanguage(text) : opts.language;
+    console.log(`[chunkDocument] Detected/specified language: ${language}`);
 
     if (language === "id" && opts.strategy === "recursive") {
         opts.separators = INDONESIAN_ACADEMIC_SEPARATORS as string[];
+        console.log("[chunkDocument] Using Indonesian academic separators for recursive strategy");
     }
 
+    let chunks: Chunk[] = [];
     switch (opts.strategy) {
         case "semantic":
-            return await semanticChunking(text, opts);
+            console.log("[chunkDocument] Executing semantic chunking");
+            chunks = await semanticChunking(text, opts);
+            break;
         case "sentence_window":
-            return sentenceWindowChunking(text, opts);
+            console.log("[chunkDocument] Executing sentence window chunking");
+            chunks = sentenceWindowChunking(text, opts);
+            break;
         case "hierarchical":
-            return hierarchicalChunking(text, opts, language);
+            console.log("[chunkDocument] Executing hierarchical chunking");
+            chunks = hierarchicalChunking(text, opts, language);
+            break;
         default:
-            return recursiveChunking(text, opts);
+            console.log("[chunkDocument] Executing recursive chunking");
+            chunks = recursiveChunking(text, opts);
     }
+
+    console.log(
+        `[chunkDocument] Chunking complete - total chunks: ${chunks.length}, avg size: ${(text.length / chunks.length).toFixed(0)} chars`
+    );
+    return chunks;
 }
 
 export function recursiveChunking(text: string, options: ChunkOptions = {}): Chunk[] {
     const opts = { ...DEFAULT_OPTIONS, ...options };
+    console.log(
+        `[recursiveChunking] Starting recursive chunking - text: ${text.length} chars, chunkSize: ${opts.chunkSize}`
+    );
     const chunks: Chunk[] = [];
 
     function recursiveSplit(input: string, separators: string[]): string[] {
@@ -192,6 +213,7 @@ export function recursiveChunking(text: string, options: ChunkOptions = {}): Chu
         }
     }
 
+    console.log(`[recursiveChunking] Recursive chunking complete - ${chunks.length} chunks created`);
     return chunks;
 }
 
@@ -225,21 +247,31 @@ function createSemanticChunk(
 // Semantic chunking - splits based on topic/meaning changes
 export async function semanticChunking(text: string, options: ChunkOptions = {}): Promise<Chunk[]> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
+    console.log(
+        `[semanticChunking] Starting semantic chunking - text: ${text.length} chars, threshold: ${opts.semanticThreshold}`
+    );
     const sentences = splitIntoSentences(text);
-    if (sentences.length === 0) return [];
+    console.log(`[semanticChunking] Split text into ${sentences.length} sentences`);
+    if (sentences.length === 0) {
+        console.log("[semanticChunking] No sentences found, returning empty");
+        return [];
+    }
 
     // Batch generate embeddings to avoid N+1 problem
+    console.log(`[semanticChunking] Generating embeddings for ${sentences.length} sentences`);
     const embeddings = await batchGenerateEmbeddings(sentences);
+    console.log("[semanticChunking] Embeddings generated, finding semantic breakpoints");
 
     // Find semantic breakpoints
     const breakpoints: number[] = [0];
-    for (let i = 1; i < sentences.length; i++) {
+    for (let i = 1; i < sentences.length; i += 1) {
         const similarity = cosineSimilarity(embeddings[i - 1], embeddings[i]);
         if (similarity < opts.semanticThreshold) {
             breakpoints.push(i);
         }
     }
     breakpoints.push(sentences.length);
+    console.log(`[semanticChunking] Found ${breakpoints.length} semantic breakpoints (topic changes)`);
 
     // Extract headings with offsets for context awareness
     const headingsWithOffsets = extractHeadingsWithOffsets(text);
@@ -247,7 +279,7 @@ export async function semanticChunking(text: string, options: ChunkOptions = {})
     let currentOffset = 0;
 
     // Create chunks from breakpoints
-    for (let i = 0; i < breakpoints.length - 1; i++) {
+    for (let i = 0; i < breakpoints.length - 1; i += 1) {
         const start = breakpoints[i];
         const end = breakpoints[i + 1];
         const chunkSentences = sentences.slice(start, end);
@@ -261,7 +293,7 @@ export async function semanticChunking(text: string, options: ChunkOptions = {})
             let avgSimilarity = 1;
             if (chunkSentences.length > 1) {
                 let totalSim = 0;
-                for (let j = start; j < end - 1; j++) {
+                for (let j = start; j < end - 1; j += 1) {
                     totalSim += cosineSimilarity(embeddings[j], embeddings[j + 1]);
                 }
                 avgSimilarity = totalSim / (end - start - 1);
@@ -283,9 +315,11 @@ export async function semanticChunking(text: string, options: ChunkOptions = {})
     }
 
     // If chunks are too large, recursively split them
+    console.log(`[semanticChunking] Created ${chunks.length} semantic chunks, checking for oversized chunks`);
     const finalChunks: Chunk[] = [];
     for (const chunk of chunks) {
         if (chunk.content.length > opts.chunkSize * 1.5) {
+            console.log(`[semanticChunking] Oversized chunk (${chunk.content.length} chars), splitting recursively`);
             const subChunks = recursiveChunking(chunk.content, { ...opts, strategy: "recursive" });
             for (const sub of subChunks) {
                 finalChunks.push({
@@ -306,6 +340,7 @@ export async function semanticChunking(text: string, options: ChunkOptions = {})
         }
     }
 
+    console.log(`[semanticChunking] Semantic chunking complete - final chunks: ${finalChunks.length}`);
     return finalChunks;
 }
 

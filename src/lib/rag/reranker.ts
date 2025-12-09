@@ -314,8 +314,12 @@ export async function rerank(
     options: Partial<RerankerOptions> = {}
 ): Promise<RerankedResult[]> {
     const opts = { ...DEFAULT_OPTIONS, ...options };
+    console.log(
+        `[rerank] Starting reranking - strategy: ${opts.strategy}, results: ${results.length}, topK: ${opts.topK}`
+    );
 
     if (opts.strategy === "none" || results.length === 0) {
+        console.log("[rerank] Skipping reranking (strategy=none or no results)");
         return results.map((r, idx) => ({
             ...r,
             originalRank: idx + 1,
@@ -334,6 +338,7 @@ async function reankInternal(
 ): Promise<RerankedResult[]> {
     // Detect language if auto
     const language = opts.language === "auto" ? detectLanguage(query) : opts.language;
+    console.log(`[reankInternal] Language: ${language}, applying reranking strategy: ${opts.strategy}`);
 
     const rerankedResults: RerankedResult[] = results.map((r, idx) => ({
         ...r,
@@ -345,15 +350,22 @@ async function reankInternal(
     try {
         await applyRerankingStrategy(query, results, rerankedResults, opts, language);
     } catch (error) {
-        console.error("Re-ranking error:", error);
+        console.error("[reankInternal] Re-ranking error:", error);
         // Fall back to original scores
+        console.log("[reankInternal] Falling back to original scores");
     }
 
     // Sort by reranked score and apply filters
-    return rerankedResults
+    const finalResults = rerankedResults
         .sort((a, b) => b.rerankedScore - a.rerankedScore)
         .filter((r) => r.rerankedScore >= (opts.minScore || 0))
         .slice(0, opts.topK);
+
+    console.log(
+        `[reankInternal] Reranking complete - final results: ${finalResults.length} (min score: ${opts.minScore}, topK: ${opts.topK})`
+    );
+
+    return finalResults;
 }
 
 async function applyRerankingStrategy(
@@ -363,33 +375,39 @@ async function applyRerankingStrategy(
     opts: Required<RerankerOptions>,
     language: "en" | "id"
 ): Promise<void> {
+    console.log(`[applyRerankingStrategy] Applying ${opts.strategy} strategy to ${results.length} results`);
     switch (opts.strategy) {
         case "cross_encoder": {
+            console.log("[applyRerankingStrategy] Using Cross-Encoder scoring");
             const scores = await crossEncoderScore(
                 query,
                 results.map((r) => r.content)
             );
-            for (let idx = 0; idx < scores.length; idx++) {
+            for (let idx = 0; idx < scores.length; idx += 1) {
                 rerankedResults[idx].rerankedScore = scores[idx];
             }
+            console.log("[applyRerankingStrategy] Cross-Encoder scoring complete");
             break;
         }
 
         case "llm": {
+            console.log("[applyRerankingStrategy] Using LLM-based pointwise reranking");
             const llmResults = await llmRerank(
                 query,
                 results.map((r) => ({ content: r.content, originalScore: r.fusedScore })),
                 language,
                 opts.llmDetailedScoring
             );
-            for (let idx = 0; idx < llmResults.length; idx++) {
+            for (let idx = 0; idx < llmResults.length; idx += 1) {
                 rerankedResults[idx].rerankedScore = llmResults[idx].score;
                 rerankedResults[idx].rerankerReasoning = llmResults[idx].reasoning;
             }
+            console.log("[applyRerankingStrategy] LLM pointwise reranking complete");
             break;
         }
 
         case "llm_listwise": {
+            console.log("[applyRerankingStrategy] Using LLM-based listwise reranking");
             const listwiseResults = await llmListwiseRerank(
                 query,
                 results.map((r) => ({ content: r.content, id: r.chunkId, originalScore: r.fusedScore })),
@@ -402,10 +420,12 @@ async function applyRerankingStrategy(
                     r.rerankerReasoning = result.reasoning;
                 }
             }
+            console.log("[applyRerankingStrategy] LLM listwise reranking complete");
             break;
         }
 
         case "cohere": {
+            console.log("[applyRerankingStrategy] Using Cohere-style pairwise reranking");
             const cohereScores = await cohereStyleRerank(
                 query,
                 results.map((r) => ({ content: r.content, id: r.chunkId })),
@@ -414,10 +434,12 @@ async function applyRerankingStrategy(
             for (const r of rerankedResults) {
                 r.rerankedScore = cohereScores.get(r.chunkId) || r.fusedScore;
             }
+            console.log("[applyRerankingStrategy] Cohere-style reranking complete");
             break;
         }
 
         default: {
+            console.log("[applyRerankingStrategy] Using Ensemble reranking strategy");
             await applyEnsembleStrategy(query, results, rerankedResults, opts, language);
             break;
         }
