@@ -1,4 +1,4 @@
-import { pipeline } from "@xenova/transformers";
+import { pipeline } from "@huggingface/transformers";
 import { generateText } from "ai";
 import { CHAT_MODEL } from "@/lib/ai";
 import type { RetrievalResult } from "@/lib/rag/hybrid-retrieval";
@@ -63,16 +63,14 @@ async function crossEncoderScore(query: string, passages: string[]): Promise<num
 
     for (const passage of passages) {
         try {
-            const result = await pipe({
-                text: query,
-                text_pair: passage.slice(0, 512),
-            });
+            // Text-classification pipeline expects text and text_pair as separate arguments
+            const result = await pipe(query, passage.slice(0, 512));
 
             // Normalize the result (always an array)
             const first = Array.isArray(result) ? result[0] : result;
 
-            // score is always present for text-classification output
-            const score = "score" in first ? first.score : 0;
+            // score can be null, so provide a default
+            const score = "score" in first && first.score !== null ? first.score : 0;
 
             scores.push(score);
         } catch (err) {
