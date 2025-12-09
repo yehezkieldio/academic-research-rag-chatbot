@@ -48,6 +48,7 @@ const DEFAULT_OPTIONS: RerankerOptions = {
     },
 };
 
+// @ts-expect-error: xpression produces a union type that is too complex to represent.
 let crossEncoderPipeline: Awaited<ReturnType<typeof pipeline>> | null = null;
 
 async function getCrossEncoderPipeline() {
