@@ -1,6 +1,53 @@
 import { generateText } from "ai";
 import { CHAT_MODEL } from "@/lib/ai";
 
+/**
+ * Normalizes PDF text extracted from documents to fix common OCR and encoding issues.
+ *
+ * This function addresses several common PDF extraction problems:
+ * - Collapses multiple spaces and wide spaces (U+2000-U+200B)
+ * - Fixes OCR artifacts where letters are separated (e.g., "B A B 1" -> "BAB 1")
+ * - Normalizes spaced numbers (e.g., "2 0 2 4" -> "2024")
+ * - Cleans up punctuation spacing issues
+ * - Removes excessive whitespace while preserving paragraph structure
+ *
+ * @param text - Raw text extracted from PDF
+ * @returns Normalized, cleaned text ready for pattern matching
+ */
+function normalizePDFText(text: string): string {
+    let normalized = text;
+
+    // Replace wide spaces (U+2000-U+200B) with regular spaces
+    normalized = normalized.replace(/[\u2000-\u200B]/g, " ");
+
+    // Fix OCR artifacts: spaced uppercase letters followed by numbers (e.g., "B A B 1" -> "BAB 1")
+    normalized = normalized.replace(/\b([A-Z])\s+([A-Z])\s+([A-Z])\s+(\d)/g, "$1$2$3 $4");
+    normalized = normalized.replace(/\b([A-Z])\s+([A-Z])\s+(\d)/g, "$1$2 $3");
+
+    // Fix spaced numbers (e.g., "2 0 2 4" -> "2024")
+    normalized = normalized.replace(/\b(\d)\s+(\d)\s+(\d)\s+(\d)\b/g, "$1$2$3$4");
+    normalized = normalized.replace(/\b(\d)\s+(\d)\s+(\d)\b/g, "$1$2$3");
+    normalized = normalized.replace(/\b(\d)\s+(\d)\b/g, "$1$2");
+
+    // Fix punctuation spacing issues
+    normalized = normalized.replace(/\s+([.,;:!?)])/g, "$1");
+    normalized = normalized.replace(/([([])\s+/g, "$1");
+
+    // Collapse multiple spaces into single space
+    normalized = normalized.replace(/[ \t]+/g, " ");
+
+    // Normalize line breaks (max 2 consecutive)
+    normalized = normalized.replace(/\n{3,}/g, "\n\n");
+
+    // Trim spaces at start/end of lines
+    normalized = normalized
+        .split("\n")
+        .map((line) => line.trim())
+        .join("\n");
+
+    return normalized.trim();
+}
+
 // Academic document types
 export type AcademicDocumentType =
     | "syllabus"
@@ -71,32 +118,83 @@ export interface DocumentSection {
     endOffset: number;
 }
 
-const ACADEMIC_SYNONYMS: Record<string, string[]> = {
-    // English terms
-    hypothesis: ["theory", "proposition", "assumption", "conjecture"],
-    methodology: ["methods", "approach", "procedure", "technique"],
-    analysis: ["examination", "evaluation", "assessment", "study"],
-    conclusion: ["findings", "results", "outcome", "summary"],
-    "literature review": ["background", "prior work", "related work", "state of the art"],
-    experiment: ["study", "trial", "test", "investigation"],
-    data: ["evidence", "information", "findings", "results"],
-    significant: ["notable", "important", "meaningful", "substantial"],
-    correlation: ["relationship", "association", "connection", "link"],
-    variable: ["factor", "parameter", "element", "component"],
-    // Indonesian terms
-    hipotesis: ["teori", "dugaan", "asumsi", "perkiraan"],
-    metodologi: ["metode", "pendekatan", "prosedur", "teknik", "cara"],
-    analisis: ["pembahasan", "evaluasi", "pengkajian", "telaah", "kajian"],
-    kesimpulan: ["simpulan", "konklusi", "ringkasan", "temuan"],
-    "tinjauan pustaka": ["kajian pustaka", "studi literatur", "landasan teori", "kerangka teori"],
-    penelitian: ["riset", "studi", "kajian", "investigasi", "pengkajian"],
-    signifikan: ["bermakna", "penting", "berarti", "nyata"],
-    korelasi: ["hubungan", "keterkaitan", "relasi", "asosiasi"],
-    variabel: ["faktor", "parameter", "unsur", "komponen"],
-    dampak: ["pengaruh", "efek", "akibat", "implikasi"],
-    implementasi: ["penerapan", "pelaksanaan", "eksekusi"],
-    evaluasi: ["penilaian", "assessment", "pengukuran", "asesmen"],
-};
+interface SynonymGroup {
+    terms: string[];
+    context: "general" | "research" | "programming" | "education" | "statistics";
+}
+
+const ACADEMIC_SYNONYM_GROUPS: SynonymGroup[] = [
+    // English - Research context
+    {
+        terms: ["methodology", "methods", "approach", "procedure", "technique"],
+        context: "research",
+    },
+    {
+        terms: ["analysis", "examination", "evaluation", "assessment"],
+        context: "research",
+    },
+    {
+        terms: ["conclusion", "findings", "results", "outcome"],
+        context: "research",
+    },
+    {
+        terms: ["literature review", "background", "prior work", "related work", "state of the art"],
+        context: "research",
+    },
+    {
+        terms: ["experiment", "study", "trial", "investigation"],
+        context: "research",
+    },
+    {
+        terms: ["significant", "notable", "important", "meaningful", "substantial"],
+        context: "statistics",
+    },
+    {
+        terms: ["correlation", "relationship", "association", "connection"],
+        context: "statistics",
+    },
+    // Indonesian - Research context
+    {
+        terms: ["metodologi", "metode", "pendekatan", "prosedur", "teknik", "cara"],
+        context: "research",
+    },
+    {
+        terms: ["analisis", "pembahasan", "evaluasi", "pengkajian", "telaah", "kajian"],
+        context: "research",
+    },
+    {
+        terms: ["kesimpulan", "simpulan", "konklusi", "ringkasan", "temuan"],
+        context: "research",
+    },
+    {
+        terms: ["tinjauan pustaka", "kajian pustaka", "studi literatur", "landasan teori", "kerangka teori"],
+        context: "research",
+    },
+    {
+        terms: ["penelitian", "riset", "studi", "kajian", "investigasi"],
+        context: "research",
+    },
+    {
+        terms: ["signifikan", "bermakna", "penting", "berarti", "nyata"],
+        context: "statistics",
+    },
+    {
+        terms: ["korelasi", "hubungan", "keterkaitan", "relasi", "asosiasi"],
+        context: "statistics",
+    },
+    {
+        terms: ["dampak", "pengaruh", "efek", "akibat", "implikasi"],
+        context: "general",
+    },
+    {
+        terms: ["implementasi", "penerapan", "pelaksanaan", "eksekusi"],
+        context: "programming",
+    },
+    {
+        terms: ["evaluasi", "penilaian", "pengukuran", "asesmen", "assessment"],
+        context: "education",
+    },
+];
 
 export function detectQueryLanguage(query: string): "en" | "id" {
     const indonesianIndicators = [
@@ -134,39 +232,39 @@ function detectLanguage(content: string): "en" | "id" {
     return score > 10 ? "id" : "en";
 }
 
-export function expandQueryIndonesian(query: string): string[] {
+/**
+ * Helper function to escape special regex characters in a string.
+ */
+function escapeRegex(str: string): string {
+    return str.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * Expands a query with academic synonyms while preventing semantic drift.
+ *
+ * Uses word boundary matching (\b) to ensure only whole words are replaced,
+ * preventing false matches in compound words. Only expands terms within
+ * the same synonym group to maintain semantic coherence.
+ *
+ * @param query - The original search query
+ * @returns Array of query variations with synonyms
+ */
+export function expandQueryWithSynonyms(query: string): string[] {
     const expandedQueries = [query];
     const lowerQuery = query.toLowerCase();
 
-    // Indonesian academic synonyms
-    const indonesianSynonyms: Record<string, string[]> = {
-        hipotesis: ["teori", "dugaan", "asumsi", "perkiraan"],
-        metodologi: ["metode", "pendekatan", "prosedur", "teknik", "cara"],
-        analisis: ["pembahasan", "evaluasi", "pengkajian", "telaah", "kajian"],
-        kesimpulan: ["simpulan", "konklusi", "ringkasan", "temuan"],
-        penelitian: ["riset", "studi", "kajian", "investigasi"],
-        signifikan: ["bermakna", "penting", "berarti", "nyata"],
-        korelasi: ["hubungan", "keterkaitan", "relasi", "asosiasi"],
-        variabel: ["faktor", "parameter", "unsur", "komponen"],
-        dampak: ["pengaruh", "efek", "akibat", "implikasi"],
-        implementasi: ["penerapan", "pelaksanaan", "eksekusi"],
-        evaluasi: ["penilaian", "pengukuran", "asesmen"],
-        mahasiswa: ["siswa", "pelajar", "peserta didik"],
-        dosen: ["pengajar", "instruktur", "guru besar"],
-        kuliah: ["perkuliahan", "kelas", "mata kuliah"],
-        skripsi: ["tugas akhir", "karya tulis", "laporan akhir"],
-        pustaka: ["literatur", "referensi", "sumber"],
-    };
-
-    for (const [term, synonyms] of Object.entries(indonesianSynonyms)) {
-        if (lowerQuery.includes(term)) {
-            for (const synonym of synonyms) {
-                expandedQueries.push(query.replace(new RegExp(term, "gi"), synonym));
-            }
-        }
-        for (const synonym of synonyms) {
-            if (lowerQuery.includes(synonym)) {
-                expandedQueries.push(query.replace(new RegExp(synonym, "gi"), term));
+    for (const group of ACADEMIC_SYNONYM_GROUPS) {
+        for (const term of group.terms) {
+            // Use word boundary regex to match whole words only
+            const regex = new RegExp(`\\b${escapeRegex(term)}\\b`, "gi");
+            if (regex.test(lowerQuery)) {
+                // Replace with all other terms in the same group
+                for (const synonym of group.terms) {
+                    if (synonym.toLowerCase() !== term.toLowerCase()) {
+                        const replaceRegex = new RegExp(`\\b${escapeRegex(term)}\\b`, "gi");
+                        expandedQueries.push(query.replace(replaceRegex, synonym));
+                    }
+                }
             }
         }
     }
@@ -174,19 +272,55 @@ export function expandQueryIndonesian(query: string): string[] {
     return [...new Set(expandedQueries)];
 }
 
-export function expandQueryWithSynonyms(query: string): string[] {
+/**
+ * Expands Indonesian queries with education-specific terms.
+ *
+ * Includes domain-specific Indonesian terms commonly used in academic contexts
+ * that may not have direct research equivalents.
+ */
+export function expandQueryIndonesian(query: string): string[] {
     const expandedQueries = [query];
     const lowerQuery = query.toLowerCase();
 
-    for (const [term, synonyms] of Object.entries(ACADEMIC_SYNONYMS)) {
-        if (lowerQuery.includes(term)) {
-            for (const synonym of synonyms) {
-                expandedQueries.push(query.replace(new RegExp(term, "gi"), synonym));
-            }
-        }
-        for (const synonym of synonyms) {
-            if (lowerQuery.includes(synonym)) {
-                expandedQueries.push(query.replace(new RegExp(synonym, "gi"), term));
+    // Indonesian education-specific synonym groups
+    const indonesianEducationGroups: SynonymGroup[] = [
+        {
+            terms: ["mahasiswa", "siswa", "pelajar", "peserta didik"],
+            context: "education",
+        },
+        {
+            terms: ["dosen", "pengajar", "instruktur", "guru besar"],
+            context: "education",
+        },
+        {
+            terms: ["kuliah", "perkuliahan", "kelas", "mata kuliah"],
+            context: "education",
+        },
+        {
+            terms: ["skripsi", "tugas akhir", "karya tulis", "laporan akhir"],
+            context: "education",
+        },
+        {
+            terms: ["pustaka", "literatur", "referensi", "sumber"],
+            context: "research",
+        },
+    ];
+
+    // Combine with general academic synonym groups
+    const allGroups = [...ACADEMIC_SYNONYM_GROUPS, ...indonesianEducationGroups];
+
+    for (const group of allGroups) {
+        for (const term of group.terms) {
+            // Use word boundary regex to match whole words only
+            const regex = new RegExp(`\\b${escapeRegex(term)}\\b`, "gi");
+            if (regex.test(lowerQuery)) {
+                // Replace with all other terms in the same group
+                for (const synonym of group.terms) {
+                    if (synonym.toLowerCase() !== term.toLowerCase()) {
+                        const replaceRegex = new RegExp(`\\b${escapeRegex(term)}\\b`, "gi");
+                        expandedQueries.push(query.replace(replaceRegex, synonym));
+                    }
+                }
             }
         }
     }
@@ -266,63 +400,64 @@ const CITATION_PATTERNS = {
 };
 
 export async function detectDocumentType(content: string): Promise<AcademicDocumentType> {
-    const lowerContent = content.toLowerCase();
-    const language = detectLanguage(content);
+    const normalized = normalizePDFText(content);
+    const lowerContent = normalized.toLowerCase();
+    const language = detectLanguage(normalized);
 
     // Indonesian patterns
     if (language === "id") {
-        if (INDONESIAN_DOCUMENT_PATTERNS[0].test(content)) {
+        if (INDONESIAN_DOCUMENT_PATTERNS[0].test(normalized)) {
             return "rps";
         }
-        if (INDONESIAN_DOCUMENT_PATTERNS[1].test(content)) {
+        if (INDONESIAN_DOCUMENT_PATTERNS[1].test(normalized)) {
             return "modul_kuliah";
         }
-        if (INDONESIAN_DOCUMENT_PATTERNS[2].test(content) && INDONESIAN_DOCUMENT_PATTERNS[3].test(content)) {
+        if (INDONESIAN_DOCUMENT_PATTERNS[2].test(normalized) && INDONESIAN_DOCUMENT_PATTERNS[3].test(normalized)) {
             return "skripsi";
         }
-        if (INDONESIAN_DOCUMENT_PATTERNS[4].test(content) && INDONESIAN_DOCUMENT_PATTERNS[5].test(content)) {
+        if (INDONESIAN_DOCUMENT_PATTERNS[4].test(normalized) && INDONESIAN_DOCUMENT_PATTERNS[5].test(normalized)) {
             return "tesis";
         }
-        if (INDONESIAN_DOCUMENT_PATTERNS[6].test(content) && INDONESIAN_DOCUMENT_PATTERNS[7].test(content)) {
+        if (INDONESIAN_DOCUMENT_PATTERNS[6].test(normalized) && INDONESIAN_DOCUMENT_PATTERNS[7].test(normalized)) {
             return "disertasi";
         }
-        if (INDONESIAN_DOCUMENT_PATTERNS[8].test(content)) {
+        if (INDONESIAN_DOCUMENT_PATTERNS[8].test(normalized)) {
             return "lab_report";
         }
-        if (INDONESIAN_DOCUMENT_PATTERNS[9].test(content) && INDONESIAN_DOCUMENT_PATTERNS[10].test(content)) {
+        if (INDONESIAN_DOCUMENT_PATTERNS[9].test(normalized) && INDONESIAN_DOCUMENT_PATTERNS[10].test(normalized)) {
             return "exam";
         }
-        if (INDONESIAN_DOCUMENT_PATTERNS[11].test(content) && INDONESIAN_DOCUMENT_PATTERNS[12].test(content)) {
+        if (INDONESIAN_DOCUMENT_PATTERNS[11].test(normalized) && INDONESIAN_DOCUMENT_PATTERNS[12].test(normalized)) {
             return "assignment";
         }
     }
 
     // English patterns
-    if (ENGLISH_DOCUMENT_PATTERNS[0].test(content)) {
+    if (ENGLISH_DOCUMENT_PATTERNS[0].test(normalized)) {
         return "syllabus";
     }
-    if (ENGLISH_DOCUMENT_PATTERNS[1].test(content)) {
+    if (ENGLISH_DOCUMENT_PATTERNS[1].test(normalized)) {
         return "lecture_notes";
     }
-    if (ENGLISH_DOCUMENT_PATTERNS[2].test(content)) {
+    if (ENGLISH_DOCUMENT_PATTERNS[2].test(normalized)) {
         return "research_paper";
     }
-    if (ENGLISH_DOCUMENT_PATTERNS[3].test(content)) {
+    if (ENGLISH_DOCUMENT_PATTERNS[3].test(normalized)) {
         return "textbook";
     }
-    if (ENGLISH_DOCUMENT_PATTERNS[4].test(content)) {
+    if (ENGLISH_DOCUMENT_PATTERNS[4].test(normalized)) {
         return "assignment";
     }
-    if (ENGLISH_DOCUMENT_PATTERNS[5].test(content) && ENGLISH_DOCUMENT_PATTERNS[6].test(content)) {
+    if (ENGLISH_DOCUMENT_PATTERNS[5].test(normalized) && ENGLISH_DOCUMENT_PATTERNS[6].test(normalized)) {
         return "exam";
     }
-    if (ENGLISH_DOCUMENT_PATTERNS[7].test(content)) {
-        return content.includes("dissertation") ? "dissertation" : "thesis";
+    if (ENGLISH_DOCUMENT_PATTERNS[7].test(normalized)) {
+        return normalized.includes("dissertation") ? "dissertation" : "thesis";
     }
-    if (ENGLISH_DOCUMENT_PATTERNS[8].test(content)) {
+    if (ENGLISH_DOCUMENT_PATTERNS[8].test(normalized)) {
         return "lab_report";
     }
-    if (ENGLISH_DOCUMENT_PATTERNS[9].test(content)) {
+    if (ENGLISH_DOCUMENT_PATTERNS[9].test(normalized)) {
         return "case_study";
     }
 
@@ -333,7 +468,7 @@ export async function detectDocumentType(content: string): Promise<AcademicDocum
             prompt: `Classify this academic document into one of: syllabus, lecture_notes, research_paper, textbook, assignment, exam, thesis, dissertation, skripsi, tesis, disertasi, modul_kuliah, rps, lab_report, case_study, other.
 
 Document excerpt:
-${content.substring(0, 1000)}
+${normalized.substring(0, 1000)}
 
 Return only the category name.`,
             temperature: 0,
@@ -371,10 +506,11 @@ export function extractCourseInfo(content: string): {
     faculty?: string;
     credits?: number;
 } {
+    const normalized = normalizePDFText(content);
     const result: ReturnType<typeof extractCourseInfo> = {};
 
     for (const pattern of COURSE_CODE_PATTERNS) {
-        const match = content.match(pattern);
+        const match = normalized.match(pattern);
         if (match) {
             result.courseCode = match[0];
             break;
@@ -421,9 +557,20 @@ export function extractCourseInfo(content: string): {
     return result;
 }
 
+/**
+ * Extracts document sections from academic content.
+ *
+ * This is a goldmine for chunking - sections provide natural boundaries
+ * for dividing documents into semantically coherent chunks. Use these
+ * boundaries to create chunks that respect document structure.
+ *
+ * @param content - Raw document content
+ * @returns Array of document sections with titles, types, and offsets
+ */
 export function extractSections(content: string): DocumentSection[] {
+    const normalized = normalizePDFText(content);
     const sections: DocumentSection[] = [];
-    const language = detectLanguage(content);
+    const language = detectLanguage(normalized);
 
     const sectionPatterns: { type: DocumentSection["type"]; pattern: RegExp }[] =
         language === "id"
@@ -463,7 +610,7 @@ export function extractSections(content: string): DocumentSection[] {
               ];
 
     for (const { type, pattern } of sectionPatterns) {
-        const matches = content.matchAll(pattern);
+        const matches = normalized.matchAll(pattern);
         for (const match of matches) {
             sections.push({
                 title: match[1] || match[0],
@@ -481,17 +628,18 @@ export function extractSections(content: string): DocumentSection[] {
     }
     const lastSection = sections.at(-1);
     if (lastSection) {
-        lastSection.endOffset = content.length;
+        lastSection.endOffset = normalized.length;
     }
 
     return sections;
 }
 
 export async function extractAcademicKeywords(content: string): Promise<string[]> {
-    const language = detectLanguage(content);
+    const normalized = normalizePDFText(content);
+    const language = detectLanguage(normalized);
 
     for (const pattern of KEYWORDS_PATTERNS) {
-        const match = content.match(pattern);
+        const match = normalized.match(pattern);
         if (match) {
             return match[1]
                 .split(SPLIT_PATTERN)
@@ -506,7 +654,7 @@ export async function extractAcademicKeywords(content: string): Promise<string[]
             prompt: `Extract 5-10 key academic keywords from this ${language === "id" ? "Indonesian" : "English"} text. Return as comma-separated list.
 
 Text excerpt:
-${content.substring(0, 2000)}
+${normalized.substring(0, 2000)}
 
 Keywords:`,
             temperature: 0,
@@ -523,10 +671,11 @@ Keywords:`,
 }
 
 export function extractCitations(content: string): Citation[] {
+    const normalized = normalizePDFText(content);
     const citations: Citation[] = [];
     const seen = new Set<string>();
 
-    const apaMatches = content.matchAll(CITATION_PATTERNS.apa);
+    const apaMatches = normalized.matchAll(CITATION_PATTERNS.apa);
     for (const match of apaMatches) {
         const key = `${match[1]}-${match[2]}`;
         if (!seen.has(key)) {
@@ -540,7 +689,7 @@ export function extractCitations(content: string): Citation[] {
         }
     }
 
-    const ieeeMatches = content.matchAll(CITATION_PATTERNS.ieee);
+    const ieeeMatches = normalized.matchAll(CITATION_PATTERNS.ieee);
     for (const match of ieeeMatches) {
         const key = `ieee-${match[1]}`;
         if (!seen.has(key)) {
@@ -556,16 +705,20 @@ export function extractCitations(content: string): Citation[] {
 }
 
 export async function extractUniversityMetadata(content: string): Promise<UniversityMetadata> {
-    const language = detectLanguage(content);
-    const [documentType, keywords] = await Promise.all([detectDocumentType(content), extractAcademicKeywords(content)]);
+    const normalized = normalizePDFText(content);
+    const language = detectLanguage(normalized);
+    const [documentType, keywords] = await Promise.all([
+        detectDocumentType(normalized),
+        extractAcademicKeywords(normalized),
+    ]);
 
-    const courseInfo = extractCourseInfo(content);
-    const citations = extractCitations(content);
-    const sections = extractSections(content);
+    const courseInfo = extractCourseInfo(normalized);
+    const citations = extractCitations(normalized);
+    const sections = extractSections(normalized);
 
     let abstract: string | undefined;
     for (const pattern of ABSTRACT_PATTERNS) {
-        const match = content.match(pattern);
+        const match = normalized.match(pattern);
         if (match) {
             abstract = match[1].trim().substring(0, 500);
             break;
