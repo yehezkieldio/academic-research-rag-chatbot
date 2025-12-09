@@ -24,7 +24,7 @@
         "useMaxParams": {
           "level": "warn",
           "options": {
-            "max": 8
+            "max": 10
           }
         }
       },
