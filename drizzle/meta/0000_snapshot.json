@@ -153,12 +153,8 @@
           "name": "agent_steps_session_id_chat_sessions_id_fk",
           "tableFrom": "agent_steps",
           "tableTo": "chat_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -256,12 +252,8 @@
           "name": "chat_messages_session_id_chat_sessions_id_fk",
           "tableFrom": "chat_messages",
           "tableTo": "chat_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -428,12 +420,8 @@
           "name": "document_chunks_document_id_documents_id_fk",
           "tableFrom": "document_chunks",
           "tableTo": "documents",
-          "columnsFrom": [
-            "document_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["document_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -782,12 +770,8 @@
           "name": "evaluation_questions_run_id_evaluation_runs_id_fk",
           "tableFrom": "evaluation_questions",
           "tableTo": "evaluation_runs",
-          "columnsFrom": [
-            "run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -946,12 +930,8 @@
           "name": "guardrail_logs_session_id_chat_sessions_id_fk",
           "tableFrom": "guardrail_logs",
           "tableTo": "chat_sessions",
-          "columnsFrom": [
-            "session_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["session_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
@@ -1029,12 +1009,8 @@
           "name": "statistical_analyses_evaluation_run_id_evaluation_runs_id_fk",
           "tableFrom": "statistical_analyses",
           "tableTo": "evaluation_runs",
-          "columnsFrom": [
-            "evaluation_run_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["evaluation_run_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         },
@@ -1042,12 +1018,8 @@
           "name": "statistical_analyses_ablation_study_id_ablation_studies_id_fk",
           "tableFrom": "statistical_analyses",
           "tableTo": "ablation_studies",
-          "columnsFrom": [
-            "ablation_study_id"
-          ],
-          "columnsTo": [
-            "id"
-          ],
+          "columnsFrom": ["ablation_study_id"],
+          "columnsTo": ["id"],
           "onDelete": "cascade",
           "onUpdate": "no action"
         }
