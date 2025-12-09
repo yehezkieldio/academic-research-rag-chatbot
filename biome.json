@@ -21,6 +21,7 @@
       "nursery": {
         "noEmptySource": "off",
         "noUselessUndefined": "off",
+        "noLeakedRender": "off",
         "useMaxParams": {
           "level": "warn",
           "options": {
