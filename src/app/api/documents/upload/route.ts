@@ -2,10 +2,9 @@
  * @fileoverview API Route: Document Upload
  *
  * WHY This Endpoint Exists:
- * - Handles file upload for academic documents (PDF, DOCX, TXT, MD)
+ * - Handles file upload for academic documents (PDF, TXT, MD)
  * - Extracts text content and metadata (course info, keywords, document type)
  * - Initiates background processing for chunking and embedding generation
- * - Supports OCR for scanned PDFs using Mistral's vision model
  *
  * Supported Document Types (12 categories, 77+ types):
  * 1. Traditional Academic: syllabus, thesis, skripsi, RPS, modul
@@ -23,7 +22,7 @@
  *
  * Request/Response Flow:
  * 1. Validate file type and size
- * 2. Extract text content (with optional OCR for PDFs)
+ * 2. Extract text content
  * 3. Detect document type (syllabus, lecture notes, research paper, etc.)
  * 4. Extract academic metadata (course code, keywords, language)
  * 5. Create database record with pending status
@@ -34,7 +33,6 @@
  * - Frontend: DocumentUploader component handles multipart/form-data
  * - Document Processor: Background worker for chunking and embedding
  * - Vector Store: Qdrant for semantic search
- * - OCR: Mistral Pixtral for scanned document processing
  */
 
 import { db } from "@/lib/db";
@@ -60,13 +58,12 @@ const FILE_NAME_EXTENSION_REGEX = /\.[^/.]+$/;
  * - Background processing prevents timeout issues in serverless environments
  *
  * Request Body (multipart/form-data):
- * - file: File (required) - Document file to upload (PDF, DOCX, TXT, MD)
+ * - file: File (required) - Document file to upload (PDF, TXT, MD)
  * - category?: string - Document category for organization
  * - tags?: string - Comma-separated tags
  * - chunkingStrategy: ChunkingStrategy - Algorithm for text splitting (default: "recursive")
  * - documentType: string - Manual type override or "auto" for detection
  * - languageHint: "auto" | "en" | "id" - Language hint for processing (default: "auto")
- * - useMistralOcr: boolean - Enable OCR for scanned PDFs (default: false)
  *
  * Response:
  * - Success (200): {
@@ -79,8 +76,7 @@ const FILE_NAME_EXTENSION_REGEX = /\.[^/.]+$/;
  * - Error (500): { error: string } - Processing error
  *
  * Supported File Types:
- * - PDF: Text-based and scanned (with OCR)
- * - DOCX: Microsoft Word documents
+ * - PDF: Text-based PDFs
  * - TXT: Plain text files
  * - MD: Markdown files
  *
@@ -94,7 +90,6 @@ const FILE_NAME_EXTENSION_REGEX = /\.[^/.]+$/;
  * const formData = new FormData();
  * formData.append('file', file);
  * formData.append('chunkingStrategy', 'recursive');
- * formData.append('useMistralOcr', 'true');
  *
  * const response = await fetch('/api/documents/upload', {
  *   method: 'POST',
@@ -111,7 +106,6 @@ export async function POST(request: Request) {
         const chunkingStrategy = (formData.get("chunkingStrategy") as ChunkingStrategy) || "recursive";
         const documentType = (formData.get("documentType") as string) || "auto";
         const languageHint = (formData.get("languageHint") as "auto" | "en" | "id") || "auto";
-        const useMistralOcr = formData.get("useMistralOcr") === "true";
 
         if (!file) {
             return Response.json({ error: "No file provided" }, { status: 400 });
@@ -120,7 +114,7 @@ export async function POST(request: Request) {
         // Validate file type
         const allowedTypes = ["application/pdf", "text/plain", "text/markdown"];
         const fileExt = file.name.split(".").pop()?.toLowerCase();
-        if (!(allowedTypes.includes(file.type) || ["pdf", "txt", "md", "docx"].includes(fileExt || ""))) {
+        if (!(allowedTypes.includes(file.type) || ["pdf", "txt", "md"].includes(fileExt || ""))) {
             return Response.json({ error: "Unsupported file type" }, { status: 400 });
         }
 
@@ -160,7 +154,6 @@ export async function POST(request: Request) {
                 wordCount: extractionResult.metadata?.wordCount,
             },
             chunkingStrategy,
-            useMistralOcr,
             processingStatus: "pending",
         };
 

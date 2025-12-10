@@ -3,7 +3,6 @@
 import {
     AlertCircle,
     CheckCircle,
-    Eye,
     FileText,
     GitBranch,
     GraduationCap,
@@ -23,7 +22,6 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Progress } from "@/components/ui/progress";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { Switch } from "@/components/ui/switch";
 import { cn } from "@/lib/utils";
 
 type ChunkingStrategy = "recursive" | "semantic" | "sentence_window" | "hierarchical";
@@ -44,7 +42,6 @@ interface DocumentUploaderProps {
 
 export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
     const [files, setFiles] = useState<UploadFile[]>([]);
-    const [useMistralOcr, setUseMistralOcr] = useState(false);
     const [chunkingStrategy, setChunkingStrategy] = useState<ChunkingStrategy>("recursive");
     const [category, setCategory] = useState("");
     const [tags, setTags] = useState("");
@@ -100,7 +97,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
         try {
             const formData = new FormData();
             formData.append("file", fileItem.file);
-            formData.append("useMistralOcr", String(useMistralOcr));
             formData.append("chunkingStrategy", chunkingStrategy);
             formData.append("documentType", documentType);
             formData.append("languageHint", languageHint);
@@ -204,17 +200,6 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
             {/* Options */}
             <Card className="p-4">
                 <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3">
-                    <div className="flex items-center gap-3">
-                        <Switch checked={useMistralOcr} id="mistral-ocr" onCheckedChange={setUseMistralOcr} />
-                        <Label className="cursor-pointer" htmlFor="mistral-ocr">
-                            <span className="flex items-center gap-1.5">
-                                <Eye className="h-4 w-4" />
-                                Use Mistral OCR
-                            </span>
-                            <span className="block text-muted-foreground text-xs">For scanned PDFs and images</span>
-                        </Label>
-                    </div>
-
                     <div className="space-y-1.5">
                         <Label className="flex items-center gap-1.5">
                             <Layers className="h-4 w-4" />
