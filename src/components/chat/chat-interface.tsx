@@ -349,11 +349,23 @@ function useAgenticChat(options: {
             ]);
 
             try {
+                // Convert messages to API format
+                const apiMessages = [
+                    ...messages.map((m) => ({
+                        role: m.role,
+                        parts: m.parts,
+                    })),
+                    {
+                        role: "user" as const,
+                        parts: [{ type: "text" as const, text: userMessage }],
+                    },
+                ];
+
                 const res = await fetch("/api/chat", {
                     method: "POST",
                     headers: { "Content-Type": "application/json" },
                     body: JSON.stringify({
-                        messages: [...messages, { role: "user", content: userMessage }],
+                        messages: apiMessages,
                         sessionId,
                         useRag: settings.useRag,
                         useAgenticMode: true,
@@ -508,7 +520,7 @@ const MessageList = memo(function MessageListComponent({
 }) {
     console.log("[MessageList] Rendering with", messages.length, "messages");
     return (
-        <div className="mx-auto max-w-4xl space-y-4">
+        <div className="mx-auto max-w-4xl space-y-4 pb-4">
             {messages.length === 0 && <EmptyState />}
 
             {messages.map((message: Message, index: number) => (
@@ -918,8 +930,8 @@ export function ChatInterface() {
     } = useChatLogic();
 
     return (
-        <div className="flex h-full flex-col">
-            <div className="flex flex-col gap-3 border-border border-b bg-card p-4">
+        <div className="flex h-full flex-col overflow-hidden">
+            <div className="flex shrink-0 flex-col gap-3 border-border border-b bg-card p-4">
                 <ChatHeader
                     detectedLanguage={detectedLanguage}
                     latencyMs={latencyMs}
@@ -929,33 +941,39 @@ export function ChatInterface() {
                 <SettingsPanel setSettings={setSettings} settings={settings} />
             </div>
 
-            {(error || chatError) && (
-                <div className="mx-4 mt-4 flex items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3">
-                    <AlertTriangle className="h-4 w-4 text-destructive" />
-                    <span className="text-destructive text-sm">{error || chatError?.message}</span>
-                </div>
-            )}
+            <div className="flex min-h-0 flex-1 flex-col overflow-hidden">
+                {(error || chatError) && (
+                    <div className="mx-4 mt-4 flex shrink-0 items-center gap-2 rounded-lg border border-destructive/20 bg-destructive/10 p-3">
+                        <AlertTriangle className="h-4 w-4 text-destructive" />
+                        <span className="text-destructive text-sm">{error || chatError?.message}</span>
+                    </div>
+                )}
 
-            <ScrollArea className="flex-1 p-4">
-                <MessageList
-                    agentSteps={agentSteps}
+                <ScrollArea className="flex-1">
+                    <div className="p-4">
+                        <MessageList
+                            agentSteps={agentSteps}
+                            isLoading={isLoading}
+                            messages={messages}
+                            retrievedChunks={retrievedChunks}
+                            scrollRef={scrollRef}
+                            settings={settings}
+                        />
+                    </div>
+                </ScrollArea>
+            </div>
+
+            <div className="shrink-0">
+                <ChatInput
+                    input={input}
                     isLoading={isLoading}
-                    messages={messages}
-                    retrievedChunks={retrievedChunks}
-                    scrollRef={scrollRef}
-                    settings={settings}
+                    messagesExist={messages.length > 0}
+                    onClear={handleClear}
+                    onInputChange={handleInputChange}
+                    onReload={handleReload}
+                    onSubmit={onSubmit}
                 />
-            </ScrollArea>
-
-            <ChatInput
-                input={input}
-                isLoading={isLoading}
-                messagesExist={messages.length > 0}
-                onClear={handleClear}
-                onInputChange={handleInputChange}
-                onReload={handleReload}
-                onSubmit={onSubmit}
-            />
+            </div>
         </div>
     );
 }

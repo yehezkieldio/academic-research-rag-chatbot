@@ -36,14 +36,24 @@ export async function POST(request: Request) {
         );
 
         const lastMessage = messages.at(-1);
-        const userMessage =
-            lastMessage?.parts
-                ?.filter((part) => part.type === "text")
-                .map((part) => (part.type === "text" ? part.text : ""))
-                .join(" ") || "";
+
+        // Extract user message from UIMessage format
+        let userMessage = "";
+        if (lastMessage?.parts && Array.isArray(lastMessage.parts)) {
+            userMessage = lastMessage.parts
+                .filter((part) => part.type === "text")
+                .map((part) => part.text)
+                .join(" ");
+        } else if (typeof lastMessage === "object" && "content" in lastMessage) {
+            // Fallback for simple message format
+            userMessage = String(lastMessage.content || "");
+        }
+
+        console.log(`[POST] User message: "${userMessage.substring(0, 100)}...", length: ${userMessage.length}`);
+
         const language = detectQueryLanguage(userMessage);
 
-        console.log(`[POST] User message: "${userMessage.substring(0, 100)}...", language: ${language}`);
+        console.log(`[POST] Detected language: ${language}`);
 
         if (enableGuardrails) {
             const [inputValidation, negativeReaction] = await Promise.all([
