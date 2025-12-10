@@ -1,5 +1,5 @@
 import { ChatInterface } from "@/components/chat/chat-interface";
-import { Sidebar } from "@/components/layout/sidebar";
+import { Sidebar } from "@/components/sidebar";
 
 export default function ChatPage() {
     return (
