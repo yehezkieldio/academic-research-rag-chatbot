@@ -52,7 +52,7 @@
         "noExcessiveLinesPerFunction": {
           "level": "warn",
           "options": {
-            "maxLines": 100
+            "maxLines": 200
           }
         },
         "noExcessiveCognitiveComplexity": {

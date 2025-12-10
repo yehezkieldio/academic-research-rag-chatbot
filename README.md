@@ -1,42 +1,30 @@
-# MuliaChat: Academic Research RAG Chatbot
+Codebase ini adalah bagian dari proyek yang akan jadi publikasi ilmiah kami dengan rincian sebagai berikut:
 
-Ini adalah repositori implementasi MuliaChat, sebuah chatbot akademik yang memanfaatkan Retrieval-Augmented Generation (RAG) untuk memberikan jawaban yang akurat dan relevan berdasarkan dokumen akademik.
+Judul Publikasi:
 
-Ini adalah bagian dari proyek yang akan jadi publikasi ilmiah kami dengan rincian sebagai berikut:
+"Implementasi Agentic Retrieval-Augmented Generation (RAG) untuk Otomatisasi Layanan Mahasiswa di Universitas Mulia"
 
-Judul Publikasi: "Implementasi Agentic Retrieval-Augmented Generation (RAG) untuk Otomatisasi Layanan Mahasiswa di Universitas Mulia"
+Jenis Penelitian:
 
-Jenis Penelitian: Penelitian Eksperimental Terapan
+Penelitian Eksperimental Terapan
 
-Isu Utama: Chatbot domain spesifik seperti akademik tradisional dan LLM standar sering mengalami halusinasi dan gagal menjawab pertanyaan spesifik konteks lokal domain seperti aturan KRS, dll.
+Keterbatasan Solusi Lama:
 
-Keterbatasan Solusi Lama: RAG standar (Vector) sering melewatkan kata kunci spesifik, sementara pencarian keyword (BM25) biasa gagal memahami konteks semantik.
+Retrieval-Augmented Generation (RAG) standar sering melewatkan kata kunci spesifik, sementara pencarian keyword biasa gagal memahami konteks semantik.
 
-Metodologi:
-Penelitian ini menggunakan pendekatan kuantitatif melalui Ablation Study (Studi Ablasi) otomatis.
-Studi Ablasi itu metode untuk memahami kinerja sistem dengan menghapus atau memodifikasi komponen tertentu secara sistematis untuk melihat dampaknya terhadap kinerja keseluruhan.
+Metodologi Penelitian:
 
-Desain Eksperimen: Menguji sistem dengan membandingkan 4 konfigurasi berbeda untuk mengisolasi dampak setiap fitur:Baseline: Tanpa RAG (No Retrieval).
+Penelitian ini menggunakan pendekatan kuantitatif melalui Ablation Study (Studi Ablasi) otomatis. Studi Ablasi itu metode untuk memahami kinerja sistem dengan menghapus atau memodifikasi komponen tertentu secara sistematis untuk melihat dampaknya terhadap kinerja keseluruhan.
 
-1. Vector-Only: RAG Standar.
-2. Hybrid: Vector + BM25 (Tanpa Agent).
-3. Agentic RAG: Hybrid + Reasoning + Re-ranking (Solusi yang diusulkan).
+Isu Utama:
 
-Analisis Data:
+Chatbot domain spesifik seperti akademik tradisional dan LLM standar sering mengalami halusinasi dan gagal menjawab pertanyaan spesifik konteks lokal domain seperti aturan KRS, dll.
 
-- Menggunakan Paired t-tests untuk menguji signifikansi perbedaan performa antar konfigurasi.
-- Menggunakan ANOVA untuk perbandingan multi-grup.
-- Menghitung Confidence Intervals (95%) untuk validitas data.
+Model Hosting: Microsoft Azure OpenAI
 
-*Evaluasi dan Metrik*
-Kualitas sistem tidak dinilai secara manual, melainkan menggunakan kerangka evaluasi otomatis:
+Model Chat: gpt-4.1-mini
 
-Framework: Menggunakan RAGAS (Retrieval Augmented Generation Assessment).
+Model Embedding: text-embedding-3-small
 
-Metrik Utama:
-- Faithfulness: Mengukur seberapa akurat jawaban berdasarkan dokumen sumber (anti-halusinasi).
-- Answer Relevancy: Relevansi jawaban terhadap pertanyaan pengguna.
-- Context Precision: Ketepatan dokumen yang diambil oleh sistem retrieval.
-- Hallucination Rate: Persentase klaim yang tidak terverifikasi atau berkontradiksi dengan sumber.
-- Academic Rigor Score: Skor khusus untuk menilai akurasi sitasi dan penggunaan terminologi akademik.
+Penelitian ini menggunakan model dan layanan Microsoft Azure OpenAI karena lingkungan cloud menyediakan konsistensi kinerja, skalabilitas, serta konfigurasi model yang terstandarisasi untuk keperluan eksperimen terkontrol. Penggunaan model-model melalui Azure memungkinkan replikasi hasil karena versi model, parameter, dan pipeline inferensi berada pada lingkungan eksekusi yang stabil dan terdokumentasi. Pendekatan ini juga menghilangkan variasi performa yang dapat muncul pada deployment lokal, seperti perbedaan hardware atau optimisasi runtime, sehingga seluruh perbandingan antar konfigurasi pada Studi Ablasi dapat berjalan secara adil dan bebas bias teknis.
 
