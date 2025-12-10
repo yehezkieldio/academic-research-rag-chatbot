@@ -13,3 +13,5 @@ You are the main overseer of the current implementation. Your goal is to keep th
 Below is for GitHub Copilot, but may work for other coding assistants as well, you should adjust accordingly.
 
 When encountering a Biome lint issue, you should first try to run `bun run check:unsafe` to see if it can be fixed automatically. If not, you should try to fix the issue manually by following the linting rules provided by Biome.
+
+Run `bun run typecheck` for TypeScript type checking issues.
