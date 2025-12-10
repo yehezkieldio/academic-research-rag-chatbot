@@ -1,7 +1,8 @@
 "use client";
 
-import { Brain, Globe, Layers, Loader2, Plus, RefreshCw, Shield, Trash2, Zap } from "lucide-react";
+import { Brain, Globe, Layers, Loader2, Plus, RefreshCw, Shield, Trash2, Upload, Zap } from "lucide-react";
 import { type SetStateAction, useId, useState } from "react";
+import { ImportQuestionsDialog } from "@/components/evaluation/import-questions-dialog";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
 import {
@@ -42,6 +43,8 @@ export function CreateEvaluationDialog({ open, onOpenChange, onCreated }: Create
     const [useReranker, setUseReranker] = useState(true);
     const [rerankerStrategy, setRerankerStrategy] = useState<string>("ensemble");
     const [language, setLanguage] = useState<string>("auto");
+    const [showImportDialog, setShowImportDialog] = useState(false);
+    const [createdRunId, setCreatedRunId] = useState<string | null>(null);
 
     const addQuestion = () => {
         setQuestions([...questions, { question: "", groundTruth: "" }]);
@@ -93,24 +96,7 @@ export function CreateEvaluationDialog({ open, onOpenChange, onCreated }: Create
     };
 
     const loadSampleQuestions = () => {
-        setQuestions([
-            {
-                question:
-                    "Apa yang dimaksud dengan metodologi penelitian kualitatif dan bagaimana penerapannya dalam penelitian sosial?",
-                groundTruth:
-                    "Metodologi penelitian kualitatif adalah pendekatan penelitian yang berfokus pada pemahaman mendalam tentang fenomena sosial melalui pengumpulan data non-numerik seperti wawancara, observasi, dan analisis dokumen. Penerapannya dalam penelitian sosial meliputi studi kasus, etnografi, fenomenologi, dan grounded theory.",
-            },
-            {
-                question: "Jelaskan konsep validitas dan reliabilitas dalam penelitian akademik.",
-                groundTruth:
-                    "Validitas mengacu pada sejauh mana instrumen penelitian mengukur apa yang seharusnya diukur, sedangkan reliabilitas mengacu pada konsistensi hasil pengukuran. Validitas meliputi validitas isi, konstruk, dan kriteria. Reliabilitas dapat diukur melalui test-retest, split-half, atau inter-rater reliability.",
-            },
-            {
-                question: "Bagaimana cara melakukan analisis SWOT dalam perencanaan strategis organisasi pendidikan?",
-                groundTruth:
-                    "Analisis SWOT melibatkan identifikasi Strengths (kekuatan), Weaknesses (kelemahan), Opportunities (peluang), dan Threats (ancaman) organisasi. Dalam konteks pendidikan, ini mencakup evaluasi internal seperti kualitas pengajaran dan fasilitas, serta faktor eksternal seperti kebijakan pemerintah dan kompetisi antar institusi.",
-            },
-        ]);
+        setQuestions([]);
     };
 
     const questionId = useId();
@@ -278,6 +264,15 @@ export function CreateEvaluationDialog({ open, onOpenChange, onCreated }: Create
                         <div className="flex items-center justify-between">
                             <Label>Pertanyaan Uji</Label>
                             <div className="flex gap-2">
+                                <Button
+                                    onClick={() => setShowImportDialog(true)}
+                                    size="sm"
+                                    type="button"
+                                    variant="outline"
+                                >
+                                    <Upload className="mr-1 h-4 w-4" />
+                                    Impor Bulk
+                                </Button>
                                 <Button onClick={loadSampleQuestions} size="sm" type="button" variant="outline">
                                     Muat Contoh (ID)
                                 </Button>
@@ -341,6 +336,15 @@ export function CreateEvaluationDialog({ open, onOpenChange, onCreated }: Create
                     </Button>
                 </DialogFooter>
             </DialogContent>
+
+            {createdRunId && (
+                <ImportQuestionsDialog
+                    evaluationRunId={createdRunId}
+                    onImported={onCreated}
+                    onOpenChange={setShowImportDialog}
+                    open={showImportDialog}
+                />
+            )}
         </Dialog>
     );
 }
