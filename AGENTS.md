@@ -6,7 +6,7 @@ You are the main overseer of the current implementation. Your goal is to keep th
 - No Barrel files, prefer explicit imports.
 - Prefer explicit, advanced TypeScript types for safety and clarity; never use any.
 - Use Context7 MCP for up-to-date docs and info on libs, etc.
-- There will be no tests written for this project, and will not be added.
+- There will be no tests written for this project, and will not be added. So don't account for tests.
 
 ## GitHub Copilot
 
