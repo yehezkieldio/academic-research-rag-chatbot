@@ -3,12 +3,53 @@ import { eq } from "drizzle-orm";
 import { CHAT_MODEL, telemetryConfig } from "@/lib/ai";
 import { db } from "@/lib/db";
 import { chatMessages, chatSessions, guardrailLogs } from "@/lib/db/schema";
-import { runAgenticRag } from "@/lib/rag/agentic-rag";
+import { type AgentStep, streamAgenticRag } from "@/lib/rag/agentic-rag";
 import { buildRagPrompt, retrieveContext, SYSTEM_PROMPTS } from "@/lib/rag/context-builder";
 import { detectNegativeReaction, validateInput, validateOutput } from "@/lib/rag/guardrails";
+import type { RetrievalResult } from "@/lib/rag/hybrid-retrieval";
 import { detectQueryLanguage } from "@/lib/rag/university-domain";
 
-export const maxDuration = 30;
+export const maxDuration = 60;
+
+interface AgenticMetadata {
+    type: "agentic";
+    retrievedChunks: Array<{
+        chunkId: string;
+        documentTitle: string;
+        content: string;
+        similarity: number;
+        retrievalMethod?: string;
+        vectorScore?: number;
+        bm25Score?: number;
+    }>;
+    steps: AgentStep[];
+    language: "en" | "id";
+    latencyMs?: number;
+    citations: Array<{ id: string; documentTitle: string; citationNumber: number }>;
+}
+
+interface StandardRagMetadata {
+    type: "standard-rag";
+    retrievedChunks: Array<{
+        chunkId: string;
+        documentTitle: string;
+        content: string;
+        similarity: number;
+        retrievalMethod?: string;
+        vectorScore?: number;
+        bm25Score?: number;
+    }>;
+    language: "en" | "id";
+    latencyMs?: number;
+}
+
+interface DirectMetadata {
+    type: "direct";
+    language: "en" | "id";
+    latencyMs?: number;
+}
+
+type ChatMetadata = AgenticMetadata | StandardRagMetadata | DirectMetadata;
 
 export async function POST(request: Request) {
     const startTime = Date.now();
@@ -80,7 +121,7 @@ export async function POST(request: Request) {
                 });
             }
 
-            // Handle negative reactions with empathetic response
+            // Handle negative reactions with empathetic response (streamed)
             if (negativeReaction.detected && negativeReaction.severity === "high") {
                 console.log("[POST] High severity negative reaction detected - responding empathetically");
 
@@ -89,10 +130,25 @@ export async function POST(request: Request) {
                         ? `Saya mengerti Anda mungkin merasa ${negativeReaction.type === "frustration" ? "frustrasi" : "bingung"}. ${negativeReaction.suggestedResponse} Bagaimana saya bisa membantu Anda dengan lebih baik?`
                         : `I understand you might be feeling ${negativeReaction.type}. ${negativeReaction.suggestedResponse} How can I better assist you?`;
 
-                return Response.json({
-                    content: empathyResponse,
-                    negativeReactionDetected: true,
-                    language,
+                // Stream the empathetic response instead of JSON
+                const empathyResult = streamText({
+                    model: CHAT_MODEL,
+                    prompt: empathyResponse,
+                    experimental_telemetry: telemetryConfig,
+                });
+
+                return empathyResult.toUIMessageStreamResponse({
+                    messageMetadata: ({ part }) => {
+                        if (part.type === "start" || part.type === "finish") {
+                            return {
+                                type: "direct" as const,
+                                language,
+                                negativeReactionDetected: true,
+                                latencyMs: part.type === "finish" ? Date.now() - startTime : undefined,
+                            };
+                        }
+                        return undefined;
+                    },
                 });
             }
 
@@ -116,61 +172,25 @@ export async function POST(request: Request) {
         }
 
         if (useRag && useAgenticMode) {
-            console.log("[POST] Using agentic RAG mode");
+            console.log("[POST] Using agentic RAG mode (streaming)");
 
-            const agentResult = await runAgenticRag(userMessage, {
+            const agentResult = await streamAgenticRag(userMessage, {
                 sessionId,
                 retrievalStrategy,
                 enableGuardrails,
             });
 
-            const latencyMs = Date.now() - startTime;
+            const { stream, steps, retrievedChunks, citations, language: detectedLanguage } = agentResult;
 
             console.log(
-                `[POST] Agentic RAG completed - latency: ${latencyMs}ms, steps: ${agentResult.steps.length}, chunks: ${agentResult.retrievedChunks.length}`
+                `[POST] Agentic RAG stream initialized - initial chunks: ${retrievedChunks.length}, citations: ${citations.length}`
             );
 
-            // Save to database
-            if (sessionId) {
-                await Promise.all([
-                    db.insert(chatMessages).values({
-                        sessionId,
-                        role: "user",
-                        content: userMessage,
-                        ragEnabled: useRag,
-                        agenticMode: true,
-                        createdAt: new Date(),
-                    }),
-                    db.insert(chatMessages).values({
-                        sessionId,
-                        role: "assistant",
-                        content: agentResult.answer,
-                        retrievedChunks:
-                            agentResult.retrievedChunks.length > 0
-                                ? agentResult.retrievedChunks.map((c) => ({
-                                      chunkId: c.chunkId,
-                                      documentTitle: c.documentTitle,
-                                      content: c.content,
-                                      similarity: c.fusedScore,
-                                      retrievalMethod: c.retrievalMethod,
-                                      vectorScore: c.vectorScore,
-                                      bm25Score: c.bm25Score,
-                                  }))
-                                : undefined,
-                        ragEnabled: useRag,
-                        agenticMode: true,
-                        agentStepsCount: agentResult.steps.length,
-                        latencyMs,
-                        createdAt: new Date(),
-                    }),
-                    db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, sessionId)),
-                ]);
-            }
-
-            return Response.json({
-                content: agentResult.answer,
-                steps: agentResult.steps,
-                retrievedChunks: agentResult.retrievedChunks.map((c) => ({
+            // Prepare metadata for streaming
+            const agenticMetadata: AgenticMetadata = {
+                type: "agentic",
+                retrievedChunks: retrievedChunks.map((c: RetrievalResult) => ({
+                    chunkId: c.chunkId,
                     documentTitle: c.documentTitle,
                     content: c.content,
                     similarity: c.fusedScore,
@@ -178,27 +198,117 @@ export async function POST(request: Request) {
                     vectorScore: c.vectorScore,
                     bm25Score: c.bm25Score,
                 })),
-                latencyMs,
-                language: agentResult.language,
-                reasoning: agentResult.reasoning,
-                guardrails: agentResult.guardrailResults,
+                steps,
+                language: detectedLanguage,
+                citations,
+            };
+
+            return stream.toUIMessageStreamResponse({
+                messageMetadata: ({ part }) => {
+                    if (part.type === "finish") {
+                        const latencyMs = Date.now() - startTime;
+                        return {
+                            ...agenticMetadata,
+                            latencyMs,
+                        } as ChatMetadata;
+                    }
+                    // Return partial metadata on start
+                    if (part.type === "start") {
+                        return agenticMetadata as ChatMetadata;
+                    }
+                    return undefined;
+                },
+                onFinish: async ({ responseMessage }) => {
+                    const latencyMs = Date.now() - startTime;
+                    // Extract text from responseMessage parts
+                    const responseText =
+                        responseMessage.parts
+                            ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+                            .map((p) => p.text)
+                            .join("") || "";
+
+                    console.log(
+                        `[POST] Agentic RAG stream finished - latency: ${latencyMs}ms, steps: ${steps.length}, chunks: ${retrievedChunks.length}`
+                    );
+
+                    // Output validation
+                    if (enableGuardrails && responseText) {
+                        const outputValidation = await validateOutput(responseText, {
+                            retrievedChunks: retrievedChunks.map((c: RetrievalResult) => c.content),
+                            query: userMessage,
+                        });
+
+                        if (sessionId) {
+                            await db.insert(guardrailLogs).values({
+                                sessionId,
+                                guardrailType: "output_validation",
+                                triggered: !outputValidation.passed,
+                                severity: outputValidation.severity,
+                                details: {
+                                    rule: outputValidation.violations.map((v) => v.rule).join(", ") || "none",
+                                    action: outputValidation.passed ? "allowed" : "flagged",
+                                },
+                            });
+                        }
+                    }
+
+                    // Save messages to database
+                    if (sessionId) {
+                        await Promise.all([
+                            db.insert(chatMessages).values({
+                                sessionId,
+                                role: "user",
+                                content: userMessage,
+                                ragEnabled: useRag,
+                                agenticMode: true,
+                                createdAt: new Date(),
+                            }),
+                            db.insert(chatMessages).values({
+                                sessionId,
+                                role: "assistant",
+                                content: responseText,
+                                retrievedChunks:
+                                    retrievedChunks.length > 0
+                                        ? retrievedChunks.map((c: RetrievalResult) => ({
+                                              chunkId: c.chunkId,
+                                              documentTitle: c.documentTitle,
+                                              content: c.content,
+                                              similarity: c.fusedScore,
+                                              retrievalMethod: c.retrievalMethod,
+                                              vectorScore: c.vectorScore,
+                                              bm25Score: c.bm25Score,
+                                          }))
+                                        : undefined,
+                                ragEnabled: useRag,
+                                agenticMode: true,
+                                agentStepsCount: steps.length,
+                                latencyMs,
+                                createdAt: new Date(),
+                            }),
+                            db
+                                .update(chatSessions)
+                                .set({ updatedAt: new Date() })
+                                .where(eq(chatSessions.id, sessionId)),
+                        ]);
+                    }
+                },
             });
         }
 
-        console.log("[POST] Using standard RAG mode");
-
-        let systemPrompt = useRag ? SYSTEM_PROMPTS.rag : SYSTEM_PROMPTS.nonRag;
-        let retrievedChunks: Array<{
-            chunkId: string;
-            documentTitle: string;
-            content: string;
-            similarity: number;
-            retrievalMethod?: "vector" | "keyword" | "hybrid";
-            vectorScore?: number;
-            bm25Score?: number;
-        }> = [];
-
         if (useRag) {
+            console.log("[POST] Using standard RAG mode (streaming)");
+
+            let systemPrompt = SYSTEM_PROMPTS.rag;
+            let retrievedChunks: Array<{
+                chunkId: string;
+                documentTitle: string;
+                content: string;
+                similarity: number;
+                retrievalMethod?: "vector" | "keyword" | "hybrid";
+                vectorScore?: number;
+                bm25Score?: number;
+            }> = [];
+
             const contextResult = await retrieveContext(userMessage, {
                 topK: 5,
                 minSimilarity: 0.3,
@@ -213,47 +323,152 @@ export async function POST(request: Request) {
             if (contextResult.context) {
                 systemPrompt = buildRagPrompt(SYSTEM_PROMPTS.rag, contextResult.context, userMessage);
             }
+
+            // Prepare metadata for streaming
+            const standardRagMetadata: StandardRagMetadata = {
+                type: "standard-rag",
+                retrievedChunks,
+                language,
+            };
+
+            const result = streamText({
+                model: CHAT_MODEL,
+                system: systemPrompt,
+                messages: convertToModelMessages(messages.slice(0, -1)),
+                experimental_telemetry: {
+                    ...telemetryConfig,
+                    functionId: "rag-chat",
+                    metadata: {
+                        ...telemetryConfig.metadata,
+                        language,
+                        useRag,
+                        retrievalStrategy,
+                    },
+                },
+            });
+
+            return result.toUIMessageStreamResponse({
+                messageMetadata: ({ part }) => {
+                    if (part.type === "finish") {
+                        const latencyMs = Date.now() - startTime;
+                        return {
+                            ...standardRagMetadata,
+                            latencyMs,
+                        } as ChatMetadata;
+                    }
+                    if (part.type === "start") {
+                        return standardRagMetadata as ChatMetadata;
+                    }
+                    return undefined;
+                },
+                onFinish: async ({ responseMessage }) => {
+                    const latencyMs = Date.now() - startTime;
+                    // Extract text from responseMessage parts
+                    const text =
+                        responseMessage.parts
+                            ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+                            .map((p) => p.text)
+                            .join("") || "";
+                    console.log(`[POST] Standard RAG response finished - latency: ${latencyMs}ms`);
+
+                    // Output validation
+                    if (enableGuardrails) {
+                        const outputValidation = await validateOutput(text, {
+                            retrievedChunks: retrievedChunks.map((c) => c.content),
+                            query: userMessage,
+                        });
+
+                        if (sessionId) {
+                            await db.insert(guardrailLogs).values({
+                                sessionId,
+                                guardrailType: "output_validation",
+                                triggered: !outputValidation.passed,
+                                severity: outputValidation.severity,
+                                details: {
+                                    rule: outputValidation.violations.map((v) => v.rule).join(", ") || "none",
+                                    action: outputValidation.passed ? "allowed" : "flagged",
+                                },
+                            });
+                        }
+                    }
+
+                    // Save messages to database
+                    if (sessionId) {
+                        await Promise.all([
+                            db.insert(chatMessages).values({
+                                sessionId,
+                                role: "user",
+                                content: userMessage,
+                                ragEnabled: useRag,
+                                agenticMode: false,
+                                createdAt: new Date(),
+                            }),
+                            db.insert(chatMessages).values({
+                                sessionId,
+                                role: "assistant",
+                                content: text,
+                                retrievedChunks: retrievedChunks.length > 0 ? retrievedChunks : undefined,
+                                ragEnabled: useRag,
+                                agenticMode: false,
+                                latencyMs,
+                                createdAt: new Date(),
+                            }),
+                            db
+                                .update(chatSessions)
+                                .set({ updatedAt: new Date() })
+                                .where(eq(chatSessions.id, sessionId)),
+                        ]);
+                    }
+                },
+            });
         }
+
+        console.log("[POST] Using direct mode (no RAG, streaming)");
+
+        const directMetadata: DirectMetadata = {
+            type: "direct",
+            language,
+        };
 
         const result = streamText({
             model: CHAT_MODEL,
-            system: systemPrompt,
+            system: SYSTEM_PROMPTS.nonRag,
             messages: convertToModelMessages(messages.slice(0, -1)),
             experimental_telemetry: {
                 ...telemetryConfig,
-                functionId: useRag ? "rag-chat" : "direct-chat",
+                functionId: "direct-chat",
                 metadata: {
                     ...telemetryConfig.metadata,
                     language,
-                    useRag,
-                    retrievalStrategy,
+                    useRag: false,
                 },
             },
-            onFinish: async ({ text, usage }) => {
-                const latencyMs = Date.now() - startTime;
+        });
 
-                console.log(`[POST] Response finished - latency: ${latencyMs}ms, tokens: ${usage?.totalTokens}`);
-
-                // Output validation
-                if (enableGuardrails) {
-                    const outputValidation = await validateOutput(text, {
-                        retrievedChunks: retrievedChunks.map((c) => c.content),
-                        query: userMessage,
-                    });
-
-                    if (sessionId) {
-                        await db.insert(guardrailLogs).values({
-                            sessionId,
-                            guardrailType: "output_validation",
-                            triggered: !outputValidation.passed,
-                            severity: outputValidation.severity,
-                            details: {
-                                rule: outputValidation.violations.map((v) => v.rule).join(", ") || "none",
-                                action: outputValidation.passed ? "allowed" : "flagged",
-                            },
-                        });
-                    }
+        return result.toUIMessageStreamResponse({
+            messageMetadata: ({ part }) => {
+                if (part.type === "finish") {
+                    const latencyMs = Date.now() - startTime;
+                    return {
+                        ...directMetadata,
+                        latencyMs,
+                    } as ChatMetadata;
                 }
+                if (part.type === "start") {
+                    return directMetadata as ChatMetadata;
+                }
+                return undefined;
+            },
+            onFinish: async ({ responseMessage }) => {
+                const latencyMs = Date.now() - startTime;
+                // Extract text from responseMessage parts
+                const text =
+                    responseMessage.parts
+                        ?.filter((p): p is { type: "text"; text: string } => p.type === "text")
+                        .map((p) => p.text)
+                        .join("") || "";
+
+                console.log(`[POST] Direct mode response finished - latency: ${latencyMs}ms`);
 
                 // Save messages to database
                 if (sessionId) {
@@ -262,7 +477,7 @@ export async function POST(request: Request) {
                             sessionId,
                             role: "user",
                             content: userMessage,
-                            ragEnabled: useRag,
+                            ragEnabled: false,
                             agenticMode: false,
                             createdAt: new Date(),
                         }),
@@ -270,30 +485,14 @@ export async function POST(request: Request) {
                             sessionId,
                             role: "assistant",
                             content: text,
-                            retrievedChunks: retrievedChunks.length > 0 ? retrievedChunks : undefined,
-                            ragEnabled: useRag,
+                            ragEnabled: false,
                             agenticMode: false,
                             latencyMs,
-                            tokenCount: usage?.totalTokens,
                             createdAt: new Date(),
                         }),
                         db.update(chatSessions).set({ updatedAt: new Date() }).where(eq(chatSessions.id, sessionId)),
                     ]);
                 }
-            },
-        });
-
-        return result.toUIMessageStreamResponse({
-            headers: {
-                "X-Retrieved-Chunks": JSON.stringify(
-                    retrievedChunks.map((c) => ({
-                        documentTitle: c.documentTitle,
-                        similarity: c.similarity?.toFixed(3),
-                        method: c.retrievalMethod || "vector",
-                    }))
-                ),
-                "X-Retrieval-Strategy": retrievalStrategy,
-                "X-Language": language,
             },
         });
     } catch (error) {

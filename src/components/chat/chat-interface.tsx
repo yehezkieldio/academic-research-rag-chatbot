@@ -19,12 +19,13 @@ import {
     Send,
     Shield,
     Sparkles,
+    Square,
     Target,
     Trash2,
     User,
     Zap,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { SessionSelector } from "@/components/chat/session-manager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -41,6 +42,37 @@ import { cn } from "@/lib/utils";
 // Type definitions
 type Message = AIMessage;
 type MessagePart = Message["parts"][number];
+
+// Metadata types from server
+interface AgenticMetadata {
+    type: "agentic";
+    retrievedChunks: RetrievedChunk[];
+    steps: AgentStep[];
+    language: "en" | "id";
+    latencyMs?: number;
+    citations: Array<{ id: string; documentTitle: string; citationNumber: number }>;
+}
+
+interface StandardRagMetadata {
+    type: "standard-rag";
+    retrievedChunks: RetrievedChunk[];
+    language: "en" | "id";
+    latencyMs?: number;
+}
+
+interface DirectMetadata {
+    type: "direct";
+    language: "en" | "id";
+    latencyMs?: number;
+    negativeReactionDetected?: boolean;
+}
+
+type ChatMetadata = AgenticMetadata | StandardRagMetadata | DirectMetadata;
+
+// Extend AIMessage to include metadata
+interface MessageWithMetadata extends AIMessage {
+    metadata?: ChatMetadata;
+}
 
 const MessageBubble = memo(function MessageBubbleComponent({
     message,
@@ -93,7 +125,10 @@ const MessageBubble = memo(function MessageBubbleComponent({
                                                   key={`${message.id}-tool-${index}`}
                                               >
                                                   <Zap className="h-3 w-3" />
-                                                  <span>Calling tool: {part.type}</span>
+                                                  <span>
+                                                      Calling tool:{" "}
+                                                      {"toolName" in part ? String(part.toolName) : "tool"}
+                                                  </span>
                                               </div>
                                           );
                                       default:
@@ -137,6 +172,56 @@ function getStepIcon(stepType: AgentStep["stepType"]): React.ReactNode {
         default:
             return <Brain className="h-3 w-3" />;
     }
+}
+
+function getLoadingText(isStreaming: boolean, useAgenticMode: boolean): string {
+    if (isStreaming) {
+        return "Streaming response...";
+    }
+    if (useAgenticMode) {
+        return "Agent reasoning... / Agen sedang berpikir...";
+    }
+    return "Thinking...";
+}
+
+function getMessageSteps(
+    message: MessageWithMetadata,
+    index: number,
+    messagesLength: number,
+    agentSteps: AgentStep[] | undefined
+): AgentStep[] | undefined {
+    const metadata = message.metadata;
+    const isLastAssistantMessage = index === messagesLength - 1 && message.role === "assistant";
+
+    if (!isLastAssistantMessage) {
+        return undefined;
+    }
+
+    if (metadata?.type === "agentic") {
+        return (metadata as AgenticMetadata).steps || agentSteps;
+    }
+
+    return agentSteps;
+}
+
+function getMessageChunks(
+    message: MessageWithMetadata,
+    index: number,
+    messagesLength: number,
+    retrievedChunks: RetrievedChunk[] | undefined
+): RetrievedChunk[] | undefined {
+    const metadata = message.metadata;
+    const isLastAssistantMessage = index === messagesLength - 1 && message.role === "assistant";
+
+    if (!isLastAssistantMessage) {
+        return undefined;
+    }
+
+    if (metadata?.type === "agentic" || metadata?.type === "standard-rag") {
+        return (metadata as AgenticMetadata | StandardRagMetadata).retrievedChunks || retrievedChunks;
+    }
+
+    return retrievedChunks;
 }
 
 const AgentStepsCollapsible = memo(function AgentStepsCollapsibleComponent({ steps }: { steps: AgentStep[] }) {
@@ -301,153 +386,26 @@ const EmptyState = memo(function EmptyStateComponent() {
     );
 });
 
-function useAgenticChat(options: {
-    messages: Message[];
-    updateMessages: (msgs: Message[] | ((prev: Message[]) => Message[])) => void;
-    sessionId: string | undefined;
-    settings: {
-        useRag: boolean;
-        retrievalStrategy: "vector" | "keyword" | "hybrid";
-        enableGuardrails: boolean;
-    };
-    setAgentSteps: (steps: AgentStep[]) => void;
-    setRetrievedChunks: (chunks: RetrievedChunk[]) => void;
-    setLatencyMs: (ms: number) => void;
-    setDetectedLanguage: (lang: "en" | "id" | null) => void;
-    setError: (err: string | null) => void;
-    setLoading: (loading: boolean) => void;
-    scrollRef: React.RefObject<HTMLDivElement | null>;
-}) {
-    const {
-        messages,
-        updateMessages,
-        sessionId,
-        settings,
-        setAgentSteps,
-        setRetrievedChunks,
-        setLatencyMs,
-        setDetectedLanguage,
-        setError,
-        setLoading,
-        scrollRef,
-    } = options;
-    return useCallback(
-        async (userMessage: string) => {
-            setLoading(true);
-            setAgentSteps([]);
-            setRetrievedChunks([]);
-            setDetectedLanguage(null);
-            setError(null);
-
-            updateMessages((prev: Message[]) => [
-                ...prev,
-                {
-                    id: crypto.randomUUID(),
-                    role: "user" as const,
-                    parts: [{ type: "text" as const, text: userMessage }],
-                },
-            ]);
-
-            try {
-                // Convert messages to API format
-                const apiMessages = [
-                    ...messages.map((m) => ({
-                        role: m.role,
-                        parts: m.parts,
-                    })),
-                    {
-                        role: "user" as const,
-                        parts: [{ type: "text" as const, text: userMessage }],
-                    },
-                ];
-
-                const res = await fetch("/api/chat", {
-                    method: "POST",
-                    headers: { "Content-Type": "application/json" },
-                    body: JSON.stringify({
-                        messages: apiMessages,
-                        sessionId,
-                        useRag: settings.useRag,
-                        useAgenticMode: true,
-                        retrievalStrategy: settings.retrievalStrategy,
-                        enableGuardrails: settings.enableGuardrails,
-                    }),
-                });
-
-                const data = await res.json();
-                console.log("[useAgenticChat] Response data:", data);
-
-                if (data.error) {
-                    setError(data.error);
-                    const errorMessage: Message = {
-                        id: crypto.randomUUID(),
-                        role: "assistant" as const,
-                        parts: [{ type: "text" as const, text: `Error: ${data.error}` }],
-                    };
-                    console.log("[useAgenticChat] Adding error message:", errorMessage);
-                    updateMessages((prev: Message[]) => [...prev, errorMessage]);
-                } else {
-                    console.log("[useAgenticChat] Adding assistant message:", data.content);
-                    const assistantMessage: Message = {
-                        id: crypto.randomUUID(),
-                        role: "assistant" as const,
-                        parts: [{ type: "text" as const, text: data.content }],
-                    };
-                    console.log("[useAgenticChat] Assistant message object:", assistantMessage);
-                    updateMessages((prev: Message[]) => {
-                        const newMessages = [...prev, assistantMessage];
-                        console.log("[useAgenticChat] Previous messages count:", prev.length);
-                        console.log("[useAgenticChat] New messages count:", newMessages.length);
-                        console.log("[useAgenticChat] Full messages array:", newMessages);
-                        return newMessages;
-                    });
-                    setAgentSteps(data.steps || []);
-                    setRetrievedChunks(data.retrievedChunks || []);
-                    setLatencyMs(data.latencyMs);
-                    if (data.language) {
-                        setDetectedLanguage(data.language);
-                    }
-                    // Scroll to bottom after message is added
-                    setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
-                }
-            } catch (err) {
-                setError(err instanceof Error ? err.message : "Unknown error");
-            } finally {
-                setLoading(false);
-            }
-        },
-        [
-            messages,
-            sessionId,
-            settings,
-            updateMessages,
-            setLoading,
-            setError,
-            setAgentSteps,
-            setRetrievedChunks,
-            setLatencyMs,
-            setDetectedLanguage,
-            scrollRef,
-        ]
-    );
-}
-
 const ChatInput = memo(function ChatInputComponent({
     input,
     isLoading,
+    isStreaming,
     messagesExist,
     onInputChange,
     onSubmit,
     onReload,
     onClear,
+    onStop,
 }: {
     input: string;
     isLoading: boolean;
+    isStreaming: boolean;
     messagesExist: boolean;
     onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     onSubmit: (e: React.FormEvent) => void;
     onReload: () => void;
     onClear: () => void;
+    onStop: () => void;
 }) {
     return (
         <div className="border-border border-t bg-card p-4">
@@ -455,6 +413,7 @@ const ChatInput = memo(function ChatInputComponent({
                 <div className="relative">
                     <Textarea
                         className="min-h-[60px] resize-none bg-background pr-24"
+                        disabled={isLoading || isStreaming}
                         onChange={onInputChange}
                         onKeyDown={(e) => {
                             if (e.key === "Enter" && !e.shiftKey) {
@@ -466,7 +425,18 @@ const ChatInput = memo(function ChatInputComponent({
                         value={input}
                     />
                     <div className="absolute right-2 bottom-2 flex gap-2">
-                        {messagesExist && (
+                        {isStreaming && (
+                            <Button
+                                onClick={onStop}
+                                size="icon"
+                                title="Stop generation"
+                                type="button"
+                                variant="destructive"
+                            >
+                                <Square className="h-4 w-4" />
+                            </Button>
+                        )}
+                        {messagesExist && !isStreaming && (
                             <>
                                 <Button
                                     disabled={isLoading}
@@ -490,9 +460,11 @@ const ChatInput = memo(function ChatInputComponent({
                                 </Button>
                             </>
                         )}
-                        <Button disabled={isLoading || !input.trim()} size="icon" type="submit">
-                            <Send className="h-4 w-4" />
-                        </Button>
+                        {!isStreaming && (
+                            <Button disabled={isLoading || !input.trim()} size="icon" type="submit">
+                                <Send className="h-4 w-4" />
+                            </Button>
+                        )}
                     </div>
                 </div>
                 <p className="mt-2 text-center text-muted-foreground text-xs">
@@ -508,38 +480,35 @@ const MessageList = memo(function MessageListComponent({
     agentSteps,
     retrievedChunks,
     isLoading,
+    isStreaming,
     settings,
     scrollRef,
 }: {
-    messages: Message[];
+    messages: MessageWithMetadata[];
     agentSteps: AgentStep[];
     retrievedChunks: RetrievedChunk[];
     isLoading: boolean;
+    isStreaming: boolean;
     settings: { useAgenticMode: boolean };
     scrollRef: React.RefObject<HTMLDivElement | null>;
 }) {
-    console.log("[MessageList] Rendering with", messages.length, "messages");
     return (
         <div className="mx-auto max-w-4xl space-y-4 pb-4">
             {messages.length === 0 && <EmptyState />}
 
-            {messages.map((message: Message, index: number) => (
+            {messages.map((message: MessageWithMetadata, index: number) => (
                 <MessageBubble
-                    agentSteps={index === messages.length - 1 && message.role === "assistant" ? agentSteps : undefined}
+                    agentSteps={getMessageSteps(message, index, messages.length, agentSteps)}
                     key={message.id}
                     message={message}
-                    retrievedChunks={
-                        index === messages.length - 1 && message.role === "assistant" ? retrievedChunks : undefined
-                    }
+                    retrievedChunks={getMessageChunks(message, index, messages.length, retrievedChunks)}
                 />
             ))}
 
-            {isLoading && (
+            {(isLoading || isStreaming) && (
                 <div className="flex items-center gap-2 text-muted-foreground">
                     <Loader2 className="h-4 w-4 animate-spin" />
-                    <span className="text-sm">
-                        {settings.useAgenticMode ? "Agent reasoning... / Agen sedang berpikir..." : "Thinking..."}
-                    </span>
+                    <span className="text-sm">{getLoadingText(isStreaming, settings.useAgenticMode)}</span>
                 </div>
             )}
 
@@ -681,37 +650,64 @@ function useChatLogic() {
     const [input, setInput] = useState("");
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
+    // Memoize the transport to prevent recreation on every render
+    const transport = useMemo(
+        () =>
+            new DefaultChatTransport({
+                api: "/api/chat",
+                body: () => ({
+                    sessionId: session?.id,
+                    useRag: settings.useRag,
+                    useAgenticMode: settings.useAgenticMode,
+                    retrievalStrategy: settings.retrievalStrategy,
+                    enableGuardrails: settings.enableGuardrails,
+                }),
+            }),
+        [session?.id, settings.useRag, settings.useAgenticMode, settings.retrievalStrategy, settings.enableGuardrails]
+    );
+
     const {
         messages,
         sendMessage,
         status,
         setMessages,
         error: chatError,
-    } = useChat({
-        transport: new DefaultChatTransport({
-            api: "/api/chat",
-            body: () => ({
-                sessionId: session?.id,
-                useRag: settings.useRag,
-                useAgenticMode: settings.useAgenticMode,
-                retrievalStrategy: settings.retrievalStrategy,
-                enableGuardrails: settings.enableGuardrails,
-            }),
-        }),
-        onFinish: (message) => {
-            // Extract metadata from response if available
-            const metadata = (message as { experimental_metadata?: Record<string, unknown> }).experimental_metadata;
+        stop,
+    } = useChat<MessageWithMetadata>({
+        transport,
+        experimental_throttle: 50, // Throttle UI updates for better performance
+        onFinish: ({ message }) => {
+            // Extract metadata from the finished message
+            const metadata = message.metadata as ChatMetadata | undefined;
+
             if (metadata) {
-                if (metadata.retrievedChunks) {
-                    setRetrievedChunks(metadata.retrievedChunks as RetrievedChunk[]);
-                }
                 if (metadata.latencyMs) {
-                    setLatencyMs(metadata.latencyMs as number);
+                    setLatencyMs(metadata.latencyMs);
                 }
                 if (metadata.language) {
-                    setDetectedLanguage(metadata.language as "en" | "id");
+                    setDetectedLanguage(metadata.language);
+                }
+
+                // Handle agentic metadata
+                if (metadata.type === "agentic") {
+                    const agenticMeta = metadata as AgenticMetadata;
+                    if (agenticMeta.steps) {
+                        setAgentSteps(agenticMeta.steps);
+                    }
+                    if (agenticMeta.retrievedChunks) {
+                        setRetrievedChunks(agenticMeta.retrievedChunks);
+                    }
+                }
+
+                // Handle standard RAG metadata
+                if (metadata.type === "standard-rag") {
+                    const ragMeta = metadata as StandardRagMetadata;
+                    if (ragMeta.retrievedChunks) {
+                        setRetrievedChunks(ragMeta.retrievedChunks);
+                    }
                 }
             }
+
             scrollRef.current?.scrollIntoView({ behavior: "smooth" });
             setLoading(false);
         },
@@ -735,7 +731,7 @@ function useChatLogic() {
 
                 if (dbMessages && dbMessages.length > 0) {
                     // Convert DB messages to UIMessage format
-                    const uiMessages: Message[] = dbMessages.map(
+                    const uiMessages: MessageWithMetadata[] = dbMessages.map(
                         (msg: { id: string; role: string; content: string; createdAt: string }) => ({
                             id: msg.id,
                             role: msg.role as "user" | "assistant",
@@ -835,36 +831,34 @@ function useChatLogic() {
         }
     }, [activeSessionId, loadMessagesFromDb, messages.length]);
 
-    const handleAgenticSubmit = useAgenticChat({
-        messages,
-        updateMessages: setMessages,
-        sessionId: session?.id,
-        settings,
-        setAgentSteps,
-        setRetrievedChunks,
-        setLatencyMs,
-        setDetectedLanguage,
-        setError,
-        setLoading,
-        scrollRef,
-    });
-
     const onSubmit = useCallback(
-        async (e: React.FormEvent) => {
+        (e: React.FormEvent) => {
             e.preventDefault();
             if (!input.trim()) return;
+
+            // Reset metadata for new message
+            setAgentSteps([]);
+            setRetrievedChunks([]);
+            setDetectedLanguage(null);
+            setLatencyMs(null);
+            setError(null);
+
             const userMessage = input;
             setInput("");
-            if (settings.useAgenticMode && settings.useRag) {
-                await handleAgenticSubmit(userMessage);
-            } else {
-                sendMessage({ text: userMessage });
-            }
+
+            // Send message - useChat handles streaming automatically for all modes
+            sendMessage({ text: userMessage });
         },
-        [input, settings.useAgenticMode, settings.useRag, handleAgenticSubmit, sendMessage]
+        [input, sendMessage, setError]
     );
 
-    const isLoading = storeLoading || status === "submitted" || status === "streaming" || isLoadingMessages;
+    const isStreaming = status === "streaming";
+    const isSubmitted = status === "submitted";
+    const isLoading = storeLoading || isSubmitted || isLoadingMessages;
+
+    const handleStop = useCallback(() => {
+        stop();
+    }, [stop]);
 
     const handleReload = useCallback(() => {
         const lastUserMsg = messages.filter((m) => m.role === "user").pop();
@@ -920,12 +914,13 @@ function useChatLogic() {
         setSettings,
         error,
         chatError,
-        messages,
+        messages: messages as MessageWithMetadata[],
         agentSteps,
         retrievedChunks,
         latencyMs,
         detectedLanguage,
         isLoading,
+        isStreaming,
         input,
         scrollRef,
         handleInputChange,
@@ -933,6 +928,7 @@ function useChatLogic() {
         handleReload,
         handleClear,
         handleSessionChange,
+        handleStop,
     };
 }
 
@@ -948,6 +944,7 @@ export function ChatInterface() {
         latencyMs,
         detectedLanguage,
         isLoading,
+        isStreaming,
         input,
         scrollRef,
         handleInputChange,
@@ -955,6 +952,7 @@ export function ChatInterface() {
         handleReload,
         handleClear,
         handleSessionChange,
+        handleStop,
     } = useChatLogic();
 
     return (
@@ -982,6 +980,7 @@ export function ChatInterface() {
                         <MessageList
                             agentSteps={agentSteps}
                             isLoading={isLoading}
+                            isStreaming={isStreaming}
                             messages={messages}
                             retrievedChunks={retrievedChunks}
                             scrollRef={scrollRef}
@@ -995,10 +994,12 @@ export function ChatInterface() {
                 <ChatInput
                     input={input}
                     isLoading={isLoading}
+                    isStreaming={isStreaming}
                     messagesExist={messages.length > 0}
                     onClear={handleClear}
                     onInputChange={handleInputChange}
                     onReload={handleReload}
+                    onStop={handleStop}
                     onSubmit={onSubmit}
                 />
             </div>
