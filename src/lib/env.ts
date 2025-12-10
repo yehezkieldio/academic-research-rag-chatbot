@@ -7,8 +7,8 @@ export const env = createEnv({
         DATABASE_URL: z.url(),
         AZURE_OPENAI_API_KEY: z.string().min(1),
         AZURE_OPENAI_RESOURCE_NAME: z.string().min(1),
-        AZURE_OPENAI_CHAT_DEPLOYMENT: z.string().min(1),
-        AZURE_OPENAI_EMBEDDING_DEPLOYMENT: z.string().min(1),
+        AZURE_OPENAI_CHAT_DEPLOYMENT: z.string().min(1), // gpt-4.1-mini (of the GPT 4.1 series NOT to be confused with GPT-4o)
+        AZURE_OPENAI_EMBEDDING_DEPLOYMENT: z.string().min(1), // text-embedding-3-small
         AZURE_OPENAI_BASE_URL: z.string().min(1),
     },
     client: {},

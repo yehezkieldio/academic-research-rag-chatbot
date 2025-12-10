@@ -17,7 +17,7 @@ export async function GET(request: NextRequest) {
     const runId = searchParams.get("runId");
     const ablationId = searchParams.get("ablationId");
     const format = (searchParams.get("format") || "csv") as ExportOptions["format"];
-    const language = (searchParams.get("language") || "id") as "en" | "id";
+    const language = "id" as const;
     const includeMetadata = searchParams.get("includeMetadata") !== "false";
 
     const options: Partial<ExportOptions> = {

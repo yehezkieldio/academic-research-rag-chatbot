@@ -146,22 +146,14 @@ const NEGATIVE_REACTION_PATTERNS = {
 };
 
 const NEGATIVE_REACTION_RESPONSES = {
-    frustration: {
-        en: "I understand this can be frustrating. Let me try a different approach to help you better. Could you please clarify what specific aspect isn't working for you?",
-        id: "Saya memahami ini bisa membuat frustrasi. Mari saya coba pendekatan berbeda untuk membantu Anda lebih baik. Bisakah Anda jelaskan aspek spesifik mana yang tidak sesuai?",
-    },
-    disappointment: {
-        en: "I apologize that my previous response didn't meet your expectations. Let me try again with a clearer and more accurate answer. Please let me know if I misunderstood your question.",
-        id: "Mohon maaf jawaban sebelumnya tidak sesuai harapan Anda. Mari saya coba lagi dengan jawaban yang lebih jelas dan akurat. Tolong beritahu jika saya salah memahami pertanyaan Anda.",
-    },
-    confusion: {
-        en: "I apologize for the confusion. Let me explain more clearly. Which part would you like me to clarify first?",
-        id: "Mohon maaf atas kebingungannya. Mari saya jelaskan dengan lebih jelas. Bagian mana yang ingin Anda pahami lebih lanjut?",
-    },
-    helpRequest: {
-        en: "Of course, I'm here to help! Let's work through this together. Please tell me more about what you're trying to accomplish.",
-        id: "Tentu, saya di sini untuk membantu! Mari kita selesaikan bersama. Ceritakan lebih lanjut apa yang sedang Anda kerjakan.",
-    },
+    frustration:
+        "Saya memahami ini bisa membuat frustrasi. Mari saya coba pendekatan berbeda untuk membantu Anda lebih baik. Bisakah Anda jelaskan aspek spesifik mana yang tidak sesuai?",
+    disappointment:
+        "Mohon maaf jawaban sebelumnya tidak sesuai harapan Anda. Mari saya coba lagi dengan jawaban yang lebih jelas dan akurat. Tolong beritahu jika saya salah memahami pertanyaan Anda.",
+    confusion:
+        "Mohon maaf atas kebingungannya. Mari saya jelaskan dengan lebih jelas. Bagian mana yang ingin Anda pahami lebih lanjut?",
+    helpRequest:
+        "Tentu, saya di sini untuk membantu! Mari kita selesaikan bersama. Ceritakan lebih lanjut apa yang sedang Anda kerjakan.",
 };
 
 const ACADEMIC_TOPICS = [
@@ -308,7 +300,7 @@ function getSeverityForReactionType(
 export function detectNegativeReaction(input: string): {
     detected: boolean;
     type: "frustration" | "disappointment" | "confusion" | "helpRequest" | null;
-    language: "en" | "id";
+    language: "id";
     confidence: number;
     severity: "low" | "medium" | "high";
     suggestedResponse: string;
@@ -320,32 +312,30 @@ export function detectNegativeReaction(input: string): {
         for (const pattern of (patterns as { id: RegExp[]; en: RegExp[] }).id) {
             if (pattern.test(inputLower)) {
                 const reactionType = type as "frustration" | "disappointment" | "confusion" | "helpRequest";
-                const responses = NEGATIVE_REACTION_RESPONSES[reactionType];
                 return {
                     detected: true,
                     type: reactionType,
                     language: "id",
                     confidence: 0.85,
                     severity: getSeverityForReactionType(reactionType),
-                    suggestedResponse: responses.id,
+                    suggestedResponse: NEGATIVE_REACTION_RESPONSES[reactionType],
                 };
             }
         }
     }
 
-    // Check English patterns
+    // Check English patterns (user may type in English, but respond in Indonesian)
     for (const [type, patterns] of Object.entries(NEGATIVE_REACTION_PATTERNS)) {
         for (const pattern of (patterns as { id: RegExp[]; en: RegExp[] }).en) {
             if (pattern.test(inputLower)) {
                 const reactionType = type as "frustration" | "disappointment" | "confusion" | "helpRequest";
-                const responses = NEGATIVE_REACTION_RESPONSES[reactionType];
                 return {
                     detected: true,
                     type: reactionType,
-                    language: "en",
+                    language: "id",
                     confidence: 0.85,
                     severity: getSeverityForReactionType(reactionType),
-                    suggestedResponse: responses.en,
+                    suggestedResponse: NEGATIVE_REACTION_RESPONSES[reactionType],
                 };
             }
         }
@@ -354,7 +344,7 @@ export function detectNegativeReaction(input: string): {
     return {
         detected: false,
         type: null,
-        language: "en",
+        language: "id",
         confidence: 0,
         severity: "low",
         suggestedResponse: "",
@@ -367,17 +357,17 @@ async function analyzeSentimentLLM(input: string): Promise<{
     suggestedAction: "continue" | "clarify" | "apologize" | "escalate";
 }> {
     try {
-        const prompt = `Analyze the sentiment and emotional state of this user message in an academic chatbot context.
-The message may be in English or Indonesian (Bahasa Indonesia).
+        const prompt = `Analisis sentimen dan keadaan emosional dari pesan pengguna ini dalam konteks chatbot akademis.
+Pesan mungkin dalam Bahasa Indonesia atau Bahasa Inggris.
 
-User message: "${input}"
+Pesan pengguna: "${input}"
 
-Respond with JSON only:
+Jawab dengan JSON saja:
 {
   "sentiment": "positive" | "neutral" | "negative" | "frustrated" | "confused",
   "intensity": 0.0-1.0,
   "suggestedAction": "continue" | "clarify" | "apologize" | "escalate",
-  "reason": "brief explanation"
+  "reason": "penjelasan singkat"
 }`;
 
         const { text } = await generateText({

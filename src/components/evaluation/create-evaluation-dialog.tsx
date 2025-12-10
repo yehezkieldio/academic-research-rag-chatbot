@@ -191,9 +191,7 @@ export function CreateEvaluationDialog({ open, onOpenChange, onCreated }: Create
                                         <SelectValue />
                                     </SelectTrigger>
                                     <SelectContent>
-                                        <SelectItem value="auto">Deteksi Otomatis</SelectItem>
                                         <SelectItem value="id">Bahasa Indonesia</SelectItem>
-                                        <SelectItem value="en">English</SelectItem>
                                     </SelectContent>
                                 </Select>
                             </div>

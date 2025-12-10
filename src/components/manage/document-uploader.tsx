@@ -191,14 +191,12 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
                     </div>
                     <div>
                         <p className="font-medium text-foreground">
-                            {isDragActive ? "Drop files here" : "Drag & drop files here"}
+                            {isDragActive ? "Lepaskan file di sini" : "Seret & lepaskan file di sini"}
                         </p>
                         <p className="mt-1 text-muted-foreground text-sm">
-                            or click to browse. Supports PDF, TXT, MD files up to 50MB
+                            atau klik untuk memilih. Mendukung file PDF, TXT, MD hingga 50MB
                         </p>
-                        <p className="mt-1 text-muted-foreground text-xs">
-                            Supports English & Bahasa Indonesia documents
-                        </p>
+                        <p className="mt-1 text-muted-foreground text-xs">Mendukung dokumen Bahasa Indonesia</p>
                     </div>
                 </div>
             </div>
@@ -258,19 +256,17 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
                     <div className="space-y-1.5">
                         <Label className="flex items-center gap-1.5">
                             <Languages className="h-4 w-4" />
-                            Document Language
+                            Bahasa Dokumen
                         </Label>
                         <Select onValueChange={(v: LanguageHint) => setLanguageHint(v)} value={languageHint}>
                             <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
                             <SelectContent>
-                                <SelectItem value="auto">Auto-detect</SelectItem>
-                                <SelectItem value="en">English</SelectItem>
                                 <SelectItem value="id">Bahasa Indonesia</SelectItem>
                             </SelectContent>
                         </Select>
-                        <p className="text-muted-foreground text-xs">Affects tokenization & stopwords</p>
+                        <p className="text-muted-foreground text-xs">Mempengaruhi tokenisasi & stopwords</p>
                     </div>
 
                     <div className="space-y-1.5">

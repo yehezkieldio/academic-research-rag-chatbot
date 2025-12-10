@@ -48,7 +48,7 @@ interface AgenticMetadata {
     type: "agentic";
     retrievedChunks: RetrievedChunk[];
     steps: AgentStep[];
-    language: "en" | "id";
+    language: "id";
     latencyMs?: number;
     citations: Array<{ id: string; documentTitle: string; citationNumber: number }>;
 }
@@ -56,13 +56,13 @@ interface AgenticMetadata {
 interface StandardRagMetadata {
     type: "standard-rag";
     retrievedChunks: RetrievedChunk[];
-    language: "en" | "id";
+    language: "id";
     latencyMs?: number;
 }
 
 interface DirectMetadata {
     type: "direct";
-    language: "en" | "id";
+    language: "id";
     latencyMs?: number;
     negativeReactionDetected?: boolean;
 }
@@ -341,12 +341,11 @@ const SourcesCollapsible = memo(function SourcesCollapsibleComponent({ chunks }:
 });
 
 const ChatHeader = memo(function ChatHeaderComponent({
-    detectedLanguage,
     latencyMs,
     onSessionChange,
 }: {
     settings: { useAgenticMode: boolean; useRag: boolean };
-    detectedLanguage: "en" | "id" | null;
+    detectedLanguage: "id" | null;
     latencyMs: number | null;
     onSessionChange?: (sessionId: string) => void;
 }) {
@@ -354,12 +353,10 @@ const ChatHeader = memo(function ChatHeaderComponent({
         <div className="flex items-center justify-between">
             <SessionSelector onSessionChange={onSessionChange} />
             <div className="flex items-center gap-2">
-                {detectedLanguage && (
-                    <Badge className="gap-1" variant="outline">
-                        <Languages className="h-3 w-3" />
-                        {detectedLanguage === "id" ? "Bahasa Indonesia" : "English"}
-                    </Badge>
-                )}
+                <Badge className="gap-1" variant="outline">
+                    <Languages className="h-3 w-3" />
+                    Bahasa Indonesia
+                </Badge>
                 {latencyMs && (
                     <Badge className="gap-1" variant="outline">
                         <Clock className="h-3 w-3" />
@@ -377,10 +374,9 @@ const EmptyState = memo(function EmptyStateComponent() {
             <div className="mx-auto mb-4 w-fit rounded-full bg-primary/10 p-4 pt-0">
                 <BookOpen className="h-8 w-8 text-primary" />
             </div>
-            <h3 className="mb-2 font-medium text-foreground text-lg">Welcome to MuliaChat</h3>
-            <p className="mb-1 text-muted-foreground text-sm">Selamat datang di MuliaChat</p>
+            <h3 className="mb-2 font-medium text-foreground text-lg">Selamat Datang di MuliaChat</h3>
             <p className="mx-auto mb-4 max-w-md text-muted-foreground text-sm">
-                Ask questions in English or Bahasa Indonesia about your uploaded documents.
+                Ajukan pertanyaan tentang dokumen yang telah Anda unggah dalam Bahasa Indonesia.
             </p>
         </div>
     );
@@ -421,7 +417,7 @@ const ChatInput = memo(function ChatInputComponent({
                                 onSubmit(e);
                             }
                         }}
-                        placeholder="Ask a question (English/Indonesian)... / Ajukan pertanyaan..."
+                        placeholder="Ajukan pertanyaan..."
                         value={input}
                     />
                     <div className="absolute right-2 bottom-2 flex gap-2">
@@ -468,7 +464,7 @@ const ChatInput = memo(function ChatInputComponent({
                     </div>
                 </div>
                 <p className="mt-2 text-center text-muted-foreground text-xs">
-                    Press Enter to send • Shift+Enter for new line • Supports English & Bahasa Indonesia
+                    Tekan Enter untuk mengirim • Shift+Enter untuk baris baru
                 </p>
             </form>
         </div>
@@ -646,7 +642,7 @@ function useChatLogic() {
     const [agentSteps, setAgentSteps] = useState<AgentStep[]>([]);
     const [retrievedChunks, setRetrievedChunks] = useState<RetrievedChunk[]>([]);
     const [latencyMs, setLatencyMs] = useState<number | null>(null);
-    const [detectedLanguage, setDetectedLanguage] = useState<"en" | "id" | null>(null);
+    const [detectedLanguage, setDetectedLanguage] = useState<"id" | null>(null);
     const [input, setInput] = useState("");
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 

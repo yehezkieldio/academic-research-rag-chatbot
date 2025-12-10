@@ -83,7 +83,7 @@ const FORMAT_INFO: Record<
 
 export function DataExportPanel({ evaluationRunId, ablationStudyId, runName = "evaluation" }: DataExportPanelProps) {
     const [format, setFormat] = useState<ExportFormat>("csv");
-    const [language, setLanguage] = useState<"en" | "id">("id");
+    const language = "id" as const;
     const [includeMetadata, setIncludeMetadata] = useState(true);
     const [isExporting, setIsExporting] = useState(false);
     const [lastExported, setLastExported] = useState<string | null>(null);
@@ -131,14 +131,10 @@ export function DataExportPanel({ evaluationRunId, ablationStudyId, runName = "e
             URL.revokeObjectURL(url);
 
             setLastExported(format);
-            toast.success(
-                language === "id"
-                    ? `Data berhasil diekspor ke ${FORMAT_INFO[format].label}`
-                    : `Data exported successfully to ${FORMAT_INFO[format].label}`
-            );
+            toast.success(`Data berhasil diekspor ke ${FORMAT_INFO[format].label}`);
         } catch (error) {
             console.error("Export error:", error);
-            toast.error(language === "id" ? "Gagal mengekspor data" : "Failed to export data");
+            toast.error("Gagal mengekspor data");
         } finally {
             setIsExporting(false);
         }
@@ -155,7 +151,7 @@ print(df.describe())
 print(df.info())`;
 
         navigator.clipboard.writeText(code);
-        toast.success(language === "id" ? "Kode disalin!" : "Code copied!");
+        toast.success("Kode disalin!");
     };
 
     const copyRImportCode = () => {
@@ -169,7 +165,7 @@ summary(df)
 glimpse(df)`;
 
         navigator.clipboard.writeText(code);
-        toast.success(language === "id" ? "Kode disalin!" : "Code copied!");
+        toast.success("Kode disalin!");
     };
 
     const copySPSSImportCode = () => {
@@ -183,7 +179,7 @@ GET DATA /TYPE=TXT
 EXECUTE.`;
 
         navigator.clipboard.writeText(code);
-        toast.success(language === "id" ? "Kode disalin!" : "Code copied!");
+        toast.success("Kode disalin!");
     };
 
     return (
@@ -191,19 +187,15 @@ EXECUTE.`;
             <CardHeader>
                 <CardTitle className="flex items-center gap-2">
                     <Download className="h-5 w-5" />
-                    {language === "id" ? "Ekspor Data Mentah" : "Export Raw Data"}
+                    Ekspor Data Mentah
                 </CardTitle>
-                <CardDescription>
-                    {language === "id"
-                        ? "Ekspor data evaluasi untuk analisis statistik di SPSS, Python, atau R"
-                        : "Export evaluation data for statistical analysis in SPSS, Python, or R"}
-                </CardDescription>
+                <CardDescription>Ekspor data evaluasi untuk analisis statistik di SPSS, Python, atau R</CardDescription>
             </CardHeader>
             <CardContent className="space-y-6">
                 {/* Format Selection */}
                 <div className="grid gap-4 md:grid-cols-2">
                     <div className="space-y-2">
-                        <Label>{language === "id" ? "Format Ekspor" : "Export Format"}</Label>
+                        <Label>Format Ekspor</Label>
                         <Select onValueChange={(v) => setFormat(v as ExportFormat)} value={format}>
                             <SelectTrigger>
                                 <SelectValue />
@@ -222,34 +214,12 @@ EXECUTE.`;
                         </Select>
                         <p className="text-muted-foreground text-xs">{FORMAT_INFO[format].useCase}</p>
                     </div>
-
-                    <div className="space-y-2">
-                        <Label>{language === "id" ? "Bahasa" : "Language"}</Label>
-                        <Select onValueChange={(v) => setLanguage(v as "en" | "id")} value={language}>
-                            <SelectTrigger>
-                                <SelectValue />
-                            </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="id">Bahasa Indonesia</SelectItem>
-                                <SelectItem value="en">English</SelectItem>
-                            </SelectContent>
-                        </Select>
-                        <p className="text-muted-foreground text-xs">
-                            {language === "id"
-                                ? "Label variabel dan komentar dalam Bahasa Indonesia"
-                                : "Variable labels and comments in English"}
-                        </p>
-                    </div>
                 </div>
 
                 {/* Options */}
                 <div className="flex items-center space-x-2">
                     <Switch checked={includeMetadata} id="includeMetadata" onCheckedChange={setIncludeMetadata} />
-                    <Label htmlFor="includeMetadata">
-                        {language === "id"
-                            ? "Sertakan metadata (label variabel, deskripsi)"
-                            : "Include metadata (variable labels, descriptions)"}
-                    </Label>
+                    <Label htmlFor="includeMetadata">Sertakan metadata (label variabel, deskripsi)</Label>
                 </div>
 
                 {/* Export Button */}
@@ -261,30 +231,26 @@ EXECUTE.`;
                     {isExporting && (
                         <>
                             <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                            {language === "id" ? "Mengekspor..." : "Exporting..."}
+                            Mengekspor...
                         </>
                     )}
                     {!isExporting && lastExported === format && (
                         <>
                             <CheckCircle2 className="mr-2 h-4 w-4" />
-                            {language === "id" ? "Ekspor Lagi" : "Export Again"}
+                            Ekspor Lagi
                         </>
                     )}
                     {!isExporting && lastExported !== format && (
                         <>
                             <Download className="mr-2 h-4 w-4" />
-                            {language === "id"
-                                ? `Ekspor sebagai ${FORMAT_INFO[format].label}`
-                                : `Export as ${FORMAT_INFO[format].label}`}
+                            Ekspor sebagai {FORMAT_INFO[format].label}
                         </>
                     )}
                 </Button>
 
                 {/* Quick Import Snippets */}
                 <div className="space-y-4">
-                    <Label className="font-medium text-sm">
-                        {language === "id" ? "Kode Import Cepat" : "Quick Import Code"}
-                    </Label>
+                    <Label className="font-medium text-sm">Kode Import Cepat</Label>
 
                     <Tabs className="w-full" defaultValue="python">
                         <TabsList className="grid w-full grid-cols-3">
@@ -369,9 +335,7 @@ GET DATA /TYPE=TXT
                                 </Button>
                             </div>
                             <p className="text-muted-foreground text-xs">
-                                {language === "id"
-                                    ? "Unduh juga file .sps untuk label variabel otomatis"
-                                    : "Also download .sps file for automatic variable labels"}
+                                Unduh juga file .sps untuk label variabel otomatis
                             </p>
                         </TabsContent>
                     </Tabs>
@@ -379,41 +343,14 @@ GET DATA /TYPE=TXT
 
                 {/* Analysis Workflow */}
                 <div className="rounded-lg border bg-muted/50 p-4">
-                    <h4 className="mb-2 font-medium text-sm">
-                        {language === "id" ? "Alur Analisis yang Disarankan" : "Recommended Analysis Workflow"}
-                    </h4>
+                    <h4 className="mb-2 font-medium text-sm">Alur Analisis yang Disarankan</h4>
                     <ol className="space-y-1 text-muted-foreground text-xs">
-                        <li>1. {language === "id" ? "Ekspor data sebagai CSV" : "Export data as CSV"}</li>
-                        <li>
-                            2.{" "}
-                            {language === "id"
-                                ? "Unduh script Python/R untuk analisis lengkap"
-                                : "Download Python/R script for complete analysis"}
-                        </li>
-                        <li>
-                            3.{" "}
-                            {language === "id"
-                                ? "Jalankan paired t-test untuk RAG vs Non-RAG"
-                                : "Run paired t-test for RAG vs Non-RAG"}
-                        </li>
-                        <li>
-                            4.{" "}
-                            {language === "id"
-                                ? "Lakukan ANOVA untuk perbandingan strategi"
-                                : "Perform ANOVA for strategy comparison"}
-                        </li>
-                        <li>
-                            5.{" "}
-                            {language === "id"
-                                ? "Hitung effect size (Cohen's d, η²)"
-                                : "Calculate effect sizes (Cohen's d, η²)"}
-                        </li>
-                        <li>
-                            6.{" "}
-                            {language === "id"
-                                ? "Ekspor tabel hasil ke LaTeX untuk paper"
-                                : "Export result tables to LaTeX for paper"}
-                        </li>
+                        <li>1. Ekspor data sebagai CSV</li>
+                        <li>2. Unduh script Python/R untuk analisis lengkap</li>
+                        <li>3. Jalankan paired t-test untuk RAG vs Non-RAG</li>
+                        <li>4. Lakukan ANOVA untuk perbandingan strategi</li>
+                        <li>5. Hitung effect size (Cohen's d, η²)</li>
+                        <li>6. Ekspor tabel hasil ke LaTeX untuk paper</li>
                     </ol>
                 </div>
 

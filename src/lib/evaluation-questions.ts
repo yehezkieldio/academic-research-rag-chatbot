@@ -1,19 +1,19 @@
-// Academic evaluation questions for Indonesian university domain
+// Pertanyaan evaluasi akademis untuk domain universitas Indonesia
 export const ACADEMIC_QUESTIONS = [
     {
         question: "Pertanyaan 1",
         groundTruth: "Ground truth untuk pertanyaan 1 dalam konteks akademik Universitas Mulia.",
     },
-    // ... Add more questions here
+    // ... Tambahkan pertanyaan lainnya di sini
 ];
 
-// Sample questions for testing (English)
-export const SAMPLE_QUESTIONS_EN = [
+// Contoh pertanyaan untuk pengujian (Bahasa Indonesia)
+export const SAMPLE_QUESTIONS_ID = [
     {
-        question: "Question 1",
-        groundTruth: "Ground truth for question 1 in the context of Universitas Mulia academic domain.",
+        question: "Pertanyaan 1",
+        groundTruth: "Ground truth untuk pertanyaan 1 dalam konteks domain akademik Universitas Mulia.",
     },
-    // Add more English questions if needed
+    // Tambahkan pertanyaan Bahasa Indonesia lainnya sesuai kebutuhan
 ];
 
 export type EvaluationQuestion = {

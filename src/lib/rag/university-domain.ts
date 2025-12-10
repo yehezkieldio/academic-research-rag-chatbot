@@ -196,22 +196,9 @@ const ACADEMIC_SYNONYM_GROUPS: SynonymGroup[] = [
     },
 ];
 
-export function detectQueryLanguage(query: string): "en" | "id" {
-    const indonesianIndicators = [
-        /\b(yang|dengan|untuk|dalam|adalah|dapat|telah|sudah|akan|dari)\b/gi,
-        /\b(berdasarkan|menurut|menunjukkan|menggunakan|terhadap|merupakan|dilakukan)\b/gi,
-        /\b(apa|bagaimana|mengapa|kapan|dimana|siapa|apakah)\b/gi,
-        /\b(mahasiswa|dosen|universitas|fakultas|jurusan|skripsi|tesis|disertasi)\b/gi,
-        /\b(jelaskan|sebutkan|uraikan|bandingkan|analisis)\b/gi,
-    ];
-
-    let score = 0;
-    for (const pattern of indonesianIndicators) {
-        const matches = query.match(pattern);
-        score += matches ? matches.length : 0;
-    }
-
-    return score >= 2 ? "id" : "en";
+export function detectQueryLanguage(_query: string): "id" {
+    // Always return Indonesian - system is Indonesian-only
+    return "id";
 }
 
 // Internal detectLanguage for document content (more thorough check)
@@ -742,36 +729,20 @@ export async function extractUniversityMetadata(content: string): Promise<Univer
 
 export function enhancePromptForUniversity(basePrompt: string, metadata?: UniversityMetadata): string {
     let enhanced = basePrompt;
-    const isIndonesian = metadata?.language === "id";
 
     if (metadata?.documentType) {
         const typeContext: Record<AcademicDocumentType, string> = {
-            syllabus: isIndonesian
-                ? "Ini adalah silabus mata kuliah. Fokus pada capaian pembelajaran, tugas, dan kebijakan penilaian."
-                : "This is a course syllabus. Focus on learning objectives, assignments, and grading policies.",
-            lecture_notes: isIndonesian
-                ? "Ini adalah catatan perkuliahan. Jelaskan konsep dengan jelas dan berikan contoh."
-                : "These are lecture notes. Explain concepts clearly and provide examples.",
-            research_paper: isIndonesian
-                ? "Ini adalah makalah penelitian. Sitasi sumber dan pertahankan ketelitian akademik."
-                : "This is a research paper. Cite sources and maintain academic rigor.",
-            textbook: isIndonesian
-                ? "Ini adalah konten buku teks. Berikan penjelasan edukatif dengan contoh."
-                : "This is textbook content. Provide educational explanations with examples.",
-            assignment: isIndonesian
-                ? "Ini adalah tugas. Bantu memahami persyaratan tanpa memberikan jawaban langsung."
-                : "This is an assignment. Help understand the requirements without giving direct answers.",
-            exam: isIndonesian
-                ? "Ini adalah materi ujian. Fokus pada pengujian pengetahuan dan panduan belajar."
-                : "This is exam material. Focus on testing knowledge and providing study guidance.",
-            thesis: "This is thesis material. Maintain scholarly tone and proper citations.",
-            dissertation: "This is dissertation material. Maintain scholarly tone and proper citations.",
-            lab_report: isIndonesian
-                ? "Ini adalah laporan praktikum. Fokus pada metodologi, data, dan analisis."
-                : "This is a lab report. Focus on methodology, data, and analysis.",
-            case_study: isIndonesian
-                ? "Ini adalah studi kasus. Analisis situasi dan berikan wawasan."
-                : "This is a case study. Analyze the situation and provide insights.",
+            syllabus:
+                "Ini adalah silabus mata kuliah. Fokus pada capaian pembelajaran, tugas, dan kebijakan penilaian.",
+            lecture_notes: "Ini adalah catatan perkuliahan. Jelaskan konsep dengan jelas dan berikan contoh.",
+            research_paper: "Ini adalah makalah penelitian. Sitasi sumber dan pertahankan ketelitian akademik.",
+            textbook: "Ini adalah konten buku teks. Berikan penjelasan edukatif dengan contoh.",
+            assignment: "Ini adalah tugas. Bantu memahami persyaratan tanpa memberikan jawaban langsung.",
+            exam: "Ini adalah materi ujian. Fokus pada pengujian pengetahuan dan panduan belajar.",
+            thesis: "Ini adalah materi tesis. Pertahankan gaya ilmiah dan sitasi yang tepat.",
+            dissertation: "Ini adalah materi disertasi. Pertahankan gaya ilmiah dan sitasi yang tepat.",
+            lab_report: "Ini adalah laporan praktikum. Fokus pada metodologi, data, dan analisis.",
+            case_study: "Ini adalah studi kasus. Analisis situasi dan berikan wawasan.",
             skripsi: "Ini adalah skripsi S1. Pertahankan gaya akademik dan kutipan yang tepat.",
             tesis: "Ini adalah tesis S2. Pertahankan gaya akademik dan kutipan yang tepat.",
             disertasi: "Ini adalah disertasi S3. Pertahankan standar rigor akademik tertinggi.",
@@ -781,17 +752,16 @@ export function enhancePromptForUniversity(basePrompt: string, metadata?: Univer
         };
 
         if (typeContext[metadata.documentType]) {
-            enhanced += `\n\nDocument Context: ${typeContext[metadata.documentType]}`;
+            enhanced += `\n\nKonteks Dokumen: ${typeContext[metadata.documentType]}`;
         }
     }
 
     if (metadata?.courseCode || metadata?.courseName) {
-        const courseLabel = isIndonesian ? "Mata Kuliah" : "Course";
-        enhanced += `\n\n${courseLabel}: ${metadata.courseCode || ""} ${metadata.courseName || ""}`.trim();
+        enhanced += `\n\nMata Kuliah: ${metadata.courseCode || ""} ${metadata.courseName || ""}`.trim();
     }
 
     if (metadata?.faculty) {
-        enhanced += `\nFakultas/Faculty: ${metadata.faculty}`;
+        enhanced += `\nFakultas: ${metadata.faculty}`;
     }
 
     return enhanced;

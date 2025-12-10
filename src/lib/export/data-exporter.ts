@@ -6,7 +6,7 @@
 export interface ExportOptions {
     format: "csv" | "json" | "spss" | "python" | "r" | "excel";
     includeMetadata: boolean;
-    language: "en" | "id";
+    language: "id";
     decimalPlaces: number;
     missingValueCode: string | number;
 }
@@ -207,7 +207,7 @@ export function exportToJSON(
 
     if (opts.includeMetadata && data.length > 0) {
         output.variableLabels = Object.fromEntries(
-            Object.keys(data[0]).map((key) => [key, VARIABLE_LABELS[key]?.[opts.language] || key])
+            Object.keys(data[0]).map((key) => [key, VARIABLE_LABELS[key] || key])
         );
     }
 
@@ -242,7 +242,7 @@ export function generateSPSSSyntax(
     // Header comment
     lines.push("* SPSS Syntax for Academic RAG Evaluation Data.");
     lines.push(`* Generated: ${new Date().toISOString()}`);
-    lines.push(`* Language: ${opts.language === "id" ? "Bahasa Indonesia" : "English"}`);
+    lines.push("* Language: Bahasa Indonesia");
     lines.push("");
 
     // GET DATA command
@@ -270,7 +270,7 @@ export function generateSPSSSyntax(
     // Variable labels
     lines.push("VARIABLE LABELS");
     for (const header of headers) {
-        const label = VARIABLE_LABELS[header]?.[opts.language] || header;
+        const label = VARIABLE_LABELS[header] || header;
         lines.push(`  ${header} "${label}"`);
     }
     lines.push(".");
@@ -339,40 +339,20 @@ export function generateSPSSSyntax(
 /**
  * Generate Python script for statistical analysis
  */
-export function generatePythonScript(options: Partial<ExportOptions> = {}): string {
-    const opts = {
-        language: "id" as const,
-        ...options,
+export function generatePythonScript(_options: Partial<ExportOptions> = {}): string {
+    const comments = {
+        title: "Script Analisis Statistik untuk Evaluasi RAG",
+        imports: "Import library yang diperlukan",
+        loadData: "Muat data dari CSV",
+        descriptive: "Statistik Deskriptif",
+        pairedTTest: "Paired T-Test: RAG vs Non-RAG",
+        anova: "ANOVA untuk perbandingan strategi retrieval",
+        correlation: "Matriks Korelasi",
+        visualization: "Visualisasi",
+        effectSize: "Hitung Effect Size (Cohen's d)",
+        confidence: "Confidence Interval Bootstrap",
+        export: "Ekspor hasil ke format akademik",
     };
-
-    const comments =
-        opts.language === "id"
-            ? {
-                  title: "Script Analisis Statistik untuk Evaluasi RAG",
-                  imports: "Import library yang diperlukan",
-                  loadData: "Muat data dari CSV",
-                  descriptive: "Statistik Deskriptif",
-                  pairedTTest: "Paired T-Test: RAG vs Non-RAG",
-                  anova: "ANOVA untuk perbandingan strategi retrieval",
-                  correlation: "Matriks Korelasi",
-                  visualization: "Visualisasi",
-                  effectSize: "Hitung Effect Size (Cohen's d)",
-                  confidence: "Confidence Interval Bootstrap",
-                  export: "Ekspor hasil ke format akademik",
-              }
-            : {
-                  title: "Statistical Analysis Script for RAG Evaluation",
-                  imports: "Import required libraries",
-                  loadData: "Load data from CSV",
-                  descriptive: "Descriptive Statistics",
-                  pairedTTest: "Paired T-Test: RAG vs Non-RAG",
-                  anova: "ANOVA for retrieval strategy comparison",
-                  correlation: "Correlation Matrix",
-                  visualization: "Visualization",
-                  effectSize: "Calculate Effect Size (Cohen's d)",
-                  confidence: "Bootstrap Confidence Interval",
-                  export: "Export results to academic format",
-              };
 
     return `#!/usr/bin/env python3
 """
@@ -445,13 +425,13 @@ def cohens_d(group1: np.ndarray, group2: np.ndarray) -> Tuple[float, str]:
     # Interpretation
     abs_d = abs(d)
     if abs_d < 0.2:
-        interpretation = "negligible" if '${opts.language}' == 'en' else "dapat diabaikan"
+        interpretation = "dapat diabaikan"
     elif abs_d < 0.5:
-        interpretation = "small" if '${opts.language}' == 'en' else "kecil"
+        interpretation = "kecil"
     elif abs_d < 0.8:
-        interpretation = "medium" if '${opts.language}' == 'en' else "sedang"
+        interpretation = "sedang"
     else:
-        interpretation = "large" if '${opts.language}' == 'en' else "besar"
+        interpretation = "besar"
 
     return d, interpretation
 
@@ -462,13 +442,13 @@ def eta_squared(f_stat: float, df_between: int, df_within: int) -> Tuple[float, 
     eta_sq = ss_between / ss_total if ss_total > 0 else 0
 
     if eta_sq < 0.01:
-        interpretation = "negligible" if '${opts.language}' == 'en' else "dapat diabaikan"
+        interpretation = "dapat diabaikan"
     elif eta_sq < 0.06:
-        interpretation = "small" if '${opts.language}' == 'en' else "kecil"
+        interpretation = "kecil"
     elif eta_sq < 0.14:
-        interpretation = "medium" if '${opts.language}' == 'en' else "sedang"
+        interpretation = "sedang"
     else:
-        interpretation = "large" if '${opts.language}' == 'en' else "besar"
+        interpretation = "besar"
 
     return eta_sq, interpretation
 
@@ -792,44 +772,34 @@ def export_to_latex_table(df: pd.DataFrame,
 
     return latex
 
-def generate_academic_report(results: Dict, language: str = 'id') -> str:
+def generate_academic_report(results: Dict) -> str:
     """Generate academic-style report from analysis results."""
-    if language == 'id':
-        report = []
-        report.append("=" * 60)
-        report.append("LAPORAN ANALISIS STATISTIK")
-        report.append("Evaluasi Sistem RAG Akademik")
-        report.append("=" * 60)
+    report = []
+    report.append("=" * 60)
+    report.append("LAPORAN ANALISIS STATISTIK")
+    report.append("Evaluasi Sistem RAG Akademik")
+    report.append("=" * 60)
+    report.append("")
+
+    if 'paired_ttest' in results:
+        r = results['paired_ttest']
+        report.append("## Uji T Berpasangan: RAG vs Non-RAG")
+        report.append(f"Metrik: {r['metric']}")
+        report.append(f"Jumlah Pasangan: N = {r['n_pairs']}")
+        report.append("")
+        report.append("### Statistik Deskriptif")
+        report.append(f"RAG: M = {r['rag_mean']:.4f}, SD = {r['rag_std']:.4f}, 95% CI [{r['rag_ci_95'][0]:.4f}, {r['rag_ci_95'][1]:.4f}]")
+        report.append(f"Non-RAG: M = {r['nonrag_mean']:.4f}, SD = {r['nonrag_std']:.4f}, 95% CI [{r['nonrag_ci_95'][0]:.4f}, {r['nonrag_ci_95'][1]:.4f}]")
+        report.append("")
+        report.append("### Hasil Uji T")
+        report.append(f"t({r['n_pairs']-1}) = {r['t_statistic']:.4f}, p = {r['p_value']:.4f}")
+        report.append(f"Cohen's d = {r['cohens_d']:.4f} (efek {r['effect_size_interpretation']})")
+        report.append(f"Perbedaan Mean: {r['mean_difference']:.4f}, 95% CI [{r['diff_ci_95'][0]:.4f}, {r['diff_ci_95'][1]:.4f}]")
+        report.append("")
+        report.append(f"### Kesimpulan: {r['conclusion']}")
         report.append("")
 
-        if 'paired_ttest' in results:
-            r = results['paired_ttest']
-            report.append("## Uji T Berpasangan: RAG vs Non-RAG")
-            report.append(f"Metrik: {r['metric']}")
-            report.append(f"Jumlah Pasangan: N = {r['n_pairs']}")
-            report.append("")
-            report.append("### Statistik Deskriptif")
-            report.append(f"RAG: M = {r['rag_mean']:.4f}, SD = {r['rag_std']:.4f}, 95% CI [{r['rag_ci_95'][0]:.4f}, {r['rag_ci_95'][1]:.4f}]")
-            report.append(f"Non-RAG: M = {r['nonrag_mean']:.4f}, SD = {r['nonrag_std']:.4f}, 95% CI [{r['nonrag_ci_95'][0]:.4f}, {r['nonrag_ci_95'][1]:.4f}]")
-            report.append("")
-            report.append("### Hasil Uji T")
-            report.append(f"t({r['n_pairs']-1}) = {r['t_statistic']:.4f}, p = {r['p_value']:.4f}")
-            report.append(f"Cohen's d = {r['cohens_d']:.4f} (efek {r['effect_size_interpretation']})")
-            report.append(f"Perbedaan Mean: {r['mean_difference']:.4f}, 95% CI [{r['diff_ci_95'][0]:.4f}, {r['diff_ci_95'][1]:.4f}]")
-            report.append("")
-            report.append(f"### Kesimpulan: {r['conclusion']}")
-            report.append("")
-
-        return "\\n".join(report)
-    else:
-        # English version
-        report = []
-        report.append("=" * 60)
-        report.append("STATISTICAL ANALYSIS REPORT")
-        report.append("Academic RAG System Evaluation")
-        report.append("=" * 60)
-        # ... similar structure
-        return "\\n".join(report)
+    return "\\n".join(report)
 
 # ============================================
 # MAIN EXECUTION
@@ -907,7 +877,7 @@ if __name__ == "__main__":
     print("-" * 50)
     report = generate_academic_report({
         'paired_ttest': ttest_result
-    }, language='id')
+    })
     print(report)
 
     print("\\n[Analysis Complete]")
@@ -917,27 +887,15 @@ if __name__ == "__main__":
 /**
  * Generate R script for statistical analysis
  */
-export function generateRScript(options: Partial<ExportOptions> = {}): string {
-    const opts = { language: "id" as const, ...options };
-
-    const comments =
-        opts.language === "id"
-            ? {
-                  title: "Script Analisis Statistik R untuk Evaluasi RAG",
-                  install: "Install packages jika belum ada",
-                  load: "Muat data",
-                  descriptive: "Statistik Deskriptif",
-                  ttest: "Paired T-Test",
-                  anova: "ANOVA",
-              }
-            : {
-                  title: "R Statistical Analysis Script for RAG Evaluation",
-                  install: "Install packages if not available",
-                  load: "Load data",
-                  descriptive: "Descriptive Statistics",
-                  ttest: "Paired T-Test",
-                  anova: "ANOVA",
-              };
+export function generateRScript(_options: Partial<ExportOptions> = {}): string {
+    const comments = {
+        title: "Script Analisis Statistik R untuk Evaluasi RAG",
+        install: "Install packages jika belum ada",
+        load: "Muat data",
+        descriptive: "Statistik Deskriptif",
+        ttest: "Paired T-Test",
+        anova: "ANOVA",
+    };
 
     return `# ${comments.title}
 # Generated: ${new Date().toISOString()}

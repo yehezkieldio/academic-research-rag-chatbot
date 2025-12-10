@@ -14,7 +14,7 @@ function generateTimestampTitle(): string {
         hour: "2-digit",
         minute: "2-digit",
     };
-    return `Chat - ${now.toLocaleDateString("en-US", options)}`;
+    return `Chat - ${now.toLocaleDateString("id-ID", options)}`;
 }
 
 export async function GET() {

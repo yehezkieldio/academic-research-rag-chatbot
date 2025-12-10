@@ -13,7 +13,7 @@ import {
 } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { ACADEMIC_QUESTIONS, SAMPLE_QUESTIONS_EN } from "@/lib/evaluation-questions";
+import { ACADEMIC_QUESTIONS, SAMPLE_QUESTIONS_ID } from "@/lib/evaluation-questions";
 
 interface ImportQuestionsDialogProps {
     open: boolean;
@@ -73,8 +73,8 @@ export function ImportQuestionsDialog({ open, onOpenChange, evaluationRunId, onI
         setJsonInput(JSON.stringify(ACADEMIC_QUESTIONS, null, 2));
     };
 
-    const loadSampleQuestionsEN = () => {
-        setJsonInput(JSON.stringify(SAMPLE_QUESTIONS_EN, null, 2));
+    const loadSampleQuestionsID = () => {
+        setJsonInput(JSON.stringify(SAMPLE_QUESTIONS_ID, null, 2));
     };
 
     return (
@@ -94,11 +94,11 @@ export function ImportQuestionsDialog({ open, onOpenChange, evaluationRunId, onI
                     <div className="flex gap-2">
                         <Button onClick={loadAcademicQuestions} size="sm" type="button" variant="outline">
                             <FileJson className="mr-2 h-4 w-4" />
-                            Muat Template Indonesia ({ACADEMIC_QUESTIONS.length} pertanyaan)
+                            Muat Template Akademik ({ACADEMIC_QUESTIONS.length} pertanyaan)
                         </Button>
-                        <Button onClick={loadSampleQuestionsEN} size="sm" type="button" variant="outline">
+                        <Button onClick={loadSampleQuestionsID} size="sm" type="button" variant="outline">
                             <FileJson className="mr-2 h-4 w-4" />
-                            Load English Template ({SAMPLE_QUESTIONS_EN.length} questions)
+                            Muat Template Sampel ({SAMPLE_QUESTIONS_ID.length} pertanyaan)
                         </Button>
                     </div>
 

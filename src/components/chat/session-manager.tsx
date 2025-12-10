@@ -179,15 +179,15 @@ export const SessionManager = memo(function SessionManagerComponent({
         const diffDays = Math.floor((now.getTime() - date.getTime()) / (1000 * 60 * 60 * 24));
 
         if (diffDays === 0) {
-            return date.toLocaleTimeString("en-US", { hour: "2-digit", minute: "2-digit" });
+            return date.toLocaleTimeString("id-ID", { hour: "2-digit", minute: "2-digit" });
         }
         if (diffDays === 1) {
-            return "Yesterday";
+            return "Kemarin";
         }
         if (diffDays < 7) {
-            return date.toLocaleDateString("en-US", { weekday: "short" });
+            return date.toLocaleDateString("id-ID", { weekday: "short" });
         }
-        return date.toLocaleDateString("en-US", { month: "short", day: "numeric" });
+        return date.toLocaleDateString("id-ID", { month: "short", day: "numeric" });
     };
 
     return (

@@ -34,7 +34,7 @@ export interface AgenticRagResult {
         output?: GuardrailResult;
         negativeReaction?: Awaited<ReturnType<typeof detectNegativeReaction>>;
     };
-    language: "en" | "id";
+    language: "id";
     totalLatencyMs: number;
     reasoning?: string[];
 }
@@ -105,46 +105,35 @@ function getOrCreateStreamingState(sessionId: string): StreamingState {
 
 // ==================== System Prompt ====================
 
-const AGENTIC_SYSTEM_PROMPT = `You are an advanced academic research assistant with access to specialized tools.
-Anda adalah asisten penelitian akademis canggih dengan akses ke alat-alat khusus.
+const AGENTIC_SYSTEM_PROMPT = `Anda adalah asisten penelitian akademis canggih dengan akses ke alat-alat khusus.
 
-Your capabilities / Kemampuan Anda:
-1. Search documents using hybrid retrieval (Okapi BM25 + Vector similarity)
-   Mencari dokumen menggunakan pengambilan hibrida (Okapi BM25 + kesamaan vektor)
-2. Expand queries with academic synonyms in EN/ID
-   Memperluas kueri dengan sinonim akademis dalam EN/ID
-3. Decompose complex questions into sub-questions
-   Menguraikan pertanyaan akademis kompleks menjadi sub-pertanyaan yang lebih sederhana
-4. Verify facts against retrieved sources
-   Memverifikasi fakta terhadap sumber yang diambil
-5. Synthesize information from multiple documents
-   Mensintesis informasi dari beberapa dokumen
+Kemampuan Anda:
+1. Mencari dokumen menggunakan pengambilan hibrida (Okapi BM25 + kesamaan vektor)
+2. Memperluas kueri dengan sinonim akademis
+3. Menguraikan pertanyaan akademis kompleks menjadi sub-pertanyaan yang lebih sederhana
+4. Memverifikasi fakta terhadap sumber yang diambil
+5. Mensintesis informasi dari beberapa dokumen
 
-Guidelines / Pedoman:
-- Always cite sources with [1], [2], [3] format / Selalu kutip sumber dengan format [1], [2], [3]
-- Acknowledge uncertainty when information is incomplete / Akui ketidakpastian ketika informasi tidak lengkap
-- Use appropriate academic terminology / Gunakan terminologi akademis yang sesuai
-- Respond in the same language as the query / Jawab dalam bahasa yang sama dengan kueri
-- Verify important claims with the verify_claim tool / Verifikasi klaim penting dengan alat verify_claim
+Pedoman:
+- Selalu kutip sumber dengan format [1], [2], [3]
+- Akui ketidakpastian ketika informasi tidak lengkap
+- Gunakan terminologi akademis yang sesuai
+- Selalu jawab dalam Bahasa Indonesia
+- Verifikasi klaim penting dengan alat verify_claim
 
-IMPORTANT - Parallel Tool Execution / Eksekusi Alat Paralel:
-- For complex queries, FIRST use decompose_query to break down the question
-- After decomposing, you MUST call search_documents for ALL sub-questions IN A SINGLE TURN
-- Call multiple search_documents tools simultaneously (in parallel) - DO NOT call them one at a time
-- Example: If you have 3 sub-questions, make 3 search_documents calls in the same response
-- This parallel execution significantly reduces latency and improves response time
-
-Setelah dekomposisi, Anda HARUS memanggil search_documents untuk SEMUA sub-pertanyaan DALAM SATU GILIRAN.
-Panggil beberapa alat search_documents secara bersamaan (paralel) - JANGAN panggil satu per satu.`;
+PENTING - Eksekusi Alat Paralel:
+- Untuk kueri kompleks, PERTAMA gunakan decompose_query untuk memecah pertanyaan
+- Setelah dekomposisi, Anda HARUS memanggil search_documents untuk SEMUA sub-pertanyaan DALAM SATU GILIRAN
+- Panggil beberapa alat search_documents secara bersamaan (paralel) - JANGAN panggil satu per satu
+- Contoh: Jika ada 3 sub-pertanyaan, buat 3 panggilan search_documents dalam respons yang sama
+- Eksekusi paralel ini secara signifikan mengurangi latensi dan meningkatkan waktu respons`;
 
 // ==================== Tool Creation Functions ====================
 
-function createSearchTool(language: "en" | "id", streamingState?: StreamingState) {
+function createSearchTool(language: "id", streamingState?: StreamingState) {
     return tool({
         description:
-            language === "id"
-                ? "Cari basis pengetahuan untuk dokumen yang relevan menggunakan pengambilan hibrida (Okapi BM25 + kesamaan vektor). Gunakan untuk setiap sub-pertanyaan setelah dekomposisi."
-                : "Search the knowledge base for relevant documents using hybrid retrieval (Okapi BM25 + vector similarity). Use this for each sub-question after decomposition.",
+            "Cari basis pengetahuan untuk dokumen yang relevan menggunakan pengambilan hibrida (Okapi BM25 + kesamaan vektor). Gunakan untuk setiap sub-pertanyaan setelah dekomposisi.",
         inputSchema: z.object({
             query: z.string().describe("The search query"),
             strategy: z.enum(["vector", "keyword", "hybrid"]).default("hybrid"),
@@ -193,12 +182,9 @@ function createSearchTool(language: "en" | "id", streamingState?: StreamingState
     });
 }
 
-function createExpandQueryTool(language: "en" | "id") {
+function createExpandQueryTool(language: "id") {
     return tool({
-        description:
-            language === "id"
-                ? "Perluas kueri dengan sinonim akademis untuk meningkatkan cakupan pengambilan"
-                : "Expand a query with academic synonyms to improve retrieval coverage",
+        description: "Perluas kueri dengan sinonim akademis untuk meningkatkan cakupan pengambilan",
         inputSchema: z.object({
             query: z.string(),
         }),
@@ -213,12 +199,10 @@ function createExpandQueryTool(language: "en" | "id") {
     });
 }
 
-function createDecomposeQueryTool(language: "en" | "id") {
+function createDecomposeQueryTool(language: "id") {
     return tool({
         description:
-            language === "id"
-                ? "Uraikan pertanyaan akademis kompleks menjadi sub-pertanyaan yang lebih sederhana. PENTING: Setelah menggunakan tool ini, panggil search_documents untuk SEMUA sub-pertanyaan SECARA BERSAMAAN dalam satu giliran (paralel)."
-                : "Break down a complex academic question into simpler sub-questions. IMPORTANT: After using this tool, call search_documents for ALL sub-questions SIMULTANEOUSLY in a single turn (parallel execution).",
+            "Uraikan pertanyaan akademis kompleks menjadi sub-pertanyaan yang lebih sederhana. PENTING: Setelah menggunakan tool ini, panggil search_documents untuk SEMUA sub-pertanyaan SECARA BERSAMAAN dalam satu giliran (paralel).",
         inputSchema: z.object({
             query: z.string(),
             maxSubQuestions: z.number().min(2).max(5).default(3),
@@ -226,11 +210,11 @@ function createDecomposeQueryTool(language: "en" | "id") {
         execute: async ({ query, maxSubQuestions }) => {
             const { text } = await generateText({
                 model: CHAT_MODEL,
-                prompt: `Decompose this academic question into ${maxSubQuestions} simpler sub-questions that together answer the original. ${language === "id" ? "Respond in Indonesian." : "Respond in English."}
+                prompt: `Uraikan pertanyaan akademis ini menjadi ${maxSubQuestions} sub-pertanyaan yang lebih sederhana yang bersama-sama menjawab pertanyaan asli. Jawab dalam Bahasa Indonesia.
 
-Question: ${query}
+Pertanyaan: ${query}
 
-Return a JSON array of sub-questions only.`,
+Kembalikan hanya array JSON berisi sub-pertanyaan.`,
                 temperature: 0.3,
                 experimental_telemetry: telemetryConfig,
             });
@@ -254,12 +238,9 @@ Return a JSON array of sub-questions only.`,
     });
 }
 
-function createVerifyClaimTool(language: "en" | "id") {
+function createVerifyClaimTool() {
     return tool({
-        description:
-            language === "id"
-                ? "Verifikasi klaim terhadap dokumen yang diambil untuk mencegah halusinasi"
-                : "Verify a claim against retrieved documents to prevent hallucination",
+        description: "Verifikasi klaim terhadap dokumen yang diambil untuk mencegah halusinasi",
         inputSchema: z.object({
             claim: z.string(),
             context: z.string(),
@@ -267,13 +248,13 @@ function createVerifyClaimTool(language: "en" | "id") {
         execute: async ({ claim, context }) => {
             const { text } = await generateText({
                 model: CHAT_MODEL,
-                prompt: `Verify if this claim is supported by the context. ${language === "id" ? "Respond in Indonesian." : ""}
+                prompt: `Verifikasi apakah klaim ini didukung oleh konteks. Jawab dalam Bahasa Indonesia.
 
-Claim: ${claim}
+Klaim: ${claim}
 
-Context: ${context}
+Konteks: ${context}
 
-Respond with JSON: { "supported": boolean, "confidence": number (0-1), "evidence": string }`,
+Jawab dengan JSON: { "supported": boolean, "confidence": number (0-1), "evidence": string }`,
                 temperature: 0.1,
                 experimental_telemetry: telemetryConfig,
             });
@@ -281,18 +262,15 @@ Respond with JSON: { "supported": boolean, "confidence": number (0-1), "evidence
             try {
                 return JSON.parse(text.replace(/```json\n?|\n?```/g, "").trim());
             } catch {
-                return { supported: false, confidence: 0, evidence: "Unable to verify" };
+                return { supported: false, confidence: 0, evidence: "Tidak dapat memverifikasi" };
             }
         },
     });
 }
 
-function createSynthesizeAnswerTool(language: "en" | "id") {
+function createSynthesizeAnswerTool() {
     return tool({
-        description:
-            language === "id"
-                ? "Sintesis jawaban akhir dari beberapa sumber dengan kutipan yang tepat"
-                : "Synthesize a final answer from multiple sources with proper citations",
+        description: "Sintesis jawaban akhir dari beberapa sumber dengan kutipan yang tepat",
         inputSchema: z.object({
             question: z.string(),
             sources: z.array(
@@ -307,11 +285,11 @@ function createSynthesizeAnswerTool(language: "en" | "id") {
 
             const { text } = await generateText({
                 model: CHAT_MODEL,
-                prompt: `${language === "id" ? "Sintesis jawaban komprehensif dalam Bahasa Indonesia" : "Synthesize a comprehensive answer"} for this question using the provided sources. Include citations [1], [2], etc.
+                prompt: `Sintesis jawaban komprehensif dalam Bahasa Indonesia untuk pertanyaan ini menggunakan sumber-sumber yang disediakan. Sertakan kutipan [1], [2], dst.
 
-Question: ${question}
+Pertanyaan: ${question}
 
-Sources:
+Sumber:
 ${sourcesText}`,
                 temperature: 0.3,
                 experimental_telemetry: telemetryConfig,
@@ -322,13 +300,13 @@ ${sourcesText}`,
     });
 }
 
-function createAgentTools(language: "en" | "id", streamingState?: StreamingState) {
+function createAgentTools(language: "id", streamingState?: StreamingState) {
     return {
         search_documents: createSearchTool(language, streamingState),
         expand_query: createExpandQueryTool(language),
         decompose_query: createDecomposeQueryTool(language),
-        verify_claim: createVerifyClaimTool(language),
-        synthesize_answer: createSynthesizeAnswerTool(language),
+        verify_claim: createVerifyClaimTool(),
+        synthesize_answer: createSynthesizeAnswerTool(),
     };
 }
 
@@ -359,9 +337,9 @@ export async function runAgenticRag(
     console.log(`[runAgenticRag] Query: ${query.substring(0, 100)}...`);
 
     const startTime = Date.now();
-    const language = detectQueryLanguage(query);
+    const language = "id" as const; // Always Indonesian
     const streamingState = getOrCreateStreamingState(sessionId);
-    console.log(`[runAgenticRag] Detected language: ${language}`);
+    console.log(`[runAgenticRag] Using language: ${language}`);
 
     // Validate input
     console.log(`[runAgenticRag] Starting input validation with guardrails enabled: ${enableGuardrails}`);
@@ -373,15 +351,12 @@ export async function runAgenticRag(
     if (!passed) {
         console.warn("[runAgenticRag] Input validation failed - returning early with policy violation message");
         return {
-            answer:
-                language === "id"
-                    ? "Maaf, permintaan Anda tidak dapat diproses karena melanggar kebijakan konten."
-                    : "Sorry, your request cannot be processed due to content policy violations.",
+            answer: "Maaf, permintaan Anda tidak dapat diproses karena melanggar kebijakan konten.",
             steps: [],
             retrievedChunks: [],
             citations: [],
             guardrailResults,
-            language,
+            language: "id",
             totalLatencyMs: Date.now() - startTime,
         };
     }
@@ -470,7 +445,7 @@ async function validateInputWithGuardrails(
 
 async function executeAgentWorkflow(
     query: string,
-    language: "en" | "id",
+    language: "id",
     agentTools: ReturnType<typeof createAgentTools>,
     streamingState: StreamingState,
     maxSteps: number,
@@ -479,10 +454,8 @@ async function executeAgentWorkflow(
     steps: AgentStep[],
     streamCallback?: (step: AgentStep) => void
 ) {
-    // Enforce response language explicitly in the system prompt to prevent bilingual bias
-    const systemWithLanguage = `${AGENTIC_SYSTEM_PROMPT}\n\n[LANGUAGE ENFORCER] Always respond ONLY in ${
-        language === "id" ? "Bahasa Indonesia" : "English"
-    }. Respond in the same language as the user query.`;
+    // Enforce response language explicitly in the system prompt
+    const systemWithLanguage = `${AGENTIC_SYSTEM_PROMPT}\n\n[PENEGAK BAHASA] Selalu jawab HANYA dalam Bahasa Indonesia.`;
 
     // Log language + top chunk languages to help debug accidental language switching
     console.log(`[executeAgentWorkflow] Expected response language: ${language}`);
@@ -532,7 +505,7 @@ async function executeAgentWorkflow(
                 const { text: synthText } = await generateText({
                     model: CHAT_MODEL,
                     system: systemWithLanguage,
-                    prompt: `${language === "id" ? "Sintesis jawaban komprehensif dalam Bahasa Indonesia" : "Synthesize a comprehensive answer"} for this question using the provided sources. Include citations [1], [2], etc.\n\nQuestion: ${query}\n\nSources:\n${sourcesText}`,
+                    prompt: `Sintesis jawaban komprehensif dalam Bahasa Indonesia untuk pertanyaan ini menggunakan sumber-sumber yang disediakan. Sertakan kutipan [1], [2], dst.\n\nPertanyaan: ${query}\n\nSumber:\n${sourcesText}`,
                     temperature: 0.3,
                     experimental_telemetry: telemetryConfig,
                 });
@@ -681,7 +654,7 @@ function calculateStepDurations(steps: AgentStep[]): void {
 
 function handleAgentError(
     error: unknown,
-    language: "en" | "id",
+    _language: "id",
     steps: AgentStep[],
     streamingState: StreamingState,
     guardrailResults: AgenticRagResult["guardrailResults"],
@@ -690,15 +663,12 @@ function handleAgentError(
     if (NoSuchToolError.isInstance(error)) {
         console.error("Tool not found:", error.toolName);
         return {
-            answer:
-                language === "id"
-                    ? "Maaf, terjadi kesalahan: alat yang diminta tidak tersedia."
-                    : "Sorry, an error occurred: the requested tool is not available.",
+            answer: "Maaf, terjadi kesalahan: alat yang diminta tidak tersedia.",
             steps,
             retrievedChunks: streamingState.retrievedChunks,
             citations: streamingState.citationManager.getCitations(),
             guardrailResults,
-            language,
+            language: "id",
             totalLatencyMs: Date.now() - startTime,
         };
     }
@@ -724,7 +694,7 @@ export async function streamAgenticRag(
         maxSteps = 5,
     } = options;
 
-    const language = detectQueryLanguage(query);
+    const language = "id" as const; // Always Indonesian
     const streamingState = getOrCreateStreamingState(sessionId);
     const steps: AgentStep[] = [];
 
@@ -732,7 +702,7 @@ export async function streamAgenticRag(
     if (enableGuardrails) {
         const inputValidation = await validateInput(query);
         if (!inputValidation.passed) {
-            throw new Error("Input validation failed");
+            throw new Error("Validasi input gagal");
         }
     }
 
@@ -753,9 +723,7 @@ export async function streamAgenticRag(
 
     const agentTools = createAgentTools(language, streamingState);
 
-    const systemWithLanguage = `${AGENTIC_SYSTEM_PROMPT}\n\n[LANGUAGE ENFORCER] Always respond ONLY in ${
-        language === "id" ? "Bahasa Indonesia" : "English"
-    }. Respond in the same language as the user query.`;
+    const systemWithLanguage = `${AGENTIC_SYSTEM_PROMPT}\n\n[PENEGAK BAHASA] Selalu jawab HANYA dalam Bahasa Indonesia.`;
 
     console.log(`[streamAgenticRag] Using enforced language: ${language}`);
     console.log(

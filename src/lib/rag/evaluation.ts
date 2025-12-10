@@ -186,12 +186,9 @@ export interface AblationResult {
     }[];
 }
 
-// Language detection helper
-function detectLanguage(text: string): "en" | "id" {
-    const indonesianPatterns =
-        /\b(yang|dengan|untuk|dalam|adalah|dapat|telah|sudah|akan|berdasarkan|menurut|mahasiswa|universitas|penelitian)\b/gi;
-    const matches = text.match(indonesianPatterns);
-    return matches && matches.length > 3 ? "id" : "en";
+// Language detection helper - always returns Indonesian
+function detectLanguage(_text: string): "id" {
+    return "id";
 }
 
 // Core RAGAS Metrics
@@ -206,11 +203,8 @@ export async function calculateFaithfulness(answer: string, contexts: string[]):
     }
 
     try {
-        const language = detectLanguage(answer + contexts.join(" "));
-        console.log(`[calculateFaithfulness] Language: ${language}`);
-        const prompt =
-            language === "id"
-                ? `Anda mengevaluasi kesetiaan jawaban terhadap konteks sumbernya.
+        console.log("[calculateFaithfulness] Using Indonesian prompt");
+        const prompt = `Anda mengevaluasi kesetiaan jawaban terhadap konteks sumbernya.
 
 Konteks:
 ${contexts.join("\n\n")}
@@ -221,19 +215,7 @@ ${answer}
 Tugas: Analisis jawaban dan tentukan berapa persen klaim dalam jawaban yang dapat langsung didukung oleh konteks.
 Jawab HANYA dengan angka antara 0 dan 1 yang merepresentasikan skor kesetiaan.
 - 1.0 = Semua klaim langsung didukung oleh konteks
-- 0.0 = Tidak ada klaim yang didukung oleh konteks`
-                : `You are evaluating the faithfulness of an answer to its source context.
-
-Context:
-${contexts.join("\n\n")}
-
-Answer:
-${answer}
-
-Task: Analyze the answer and determine what percentage of claims in the answer can be directly supported by the context.
-Respond with ONLY a number between 0 and 1 representing the faithfulness score.
-- 1.0 = All claims are directly supported by context
-- 0.0 = No claims are supported by context`;
+- 0.0 = Tidak ada klaim yang didukung oleh konteks`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -275,10 +257,7 @@ export async function calculateContextPrecision(
     if (!question || contexts.length === 0 || !groundTruth) return 0;
 
     try {
-        const language = detectLanguage(question + groundTruth);
-        const prompt =
-            language === "id"
-                ? `Anda mengevaluasi presisi konteks yang diambil untuk menjawab pertanyaan.
+        const prompt = `Anda mengevaluasi presisi konteks yang diambil untuk menjawab pertanyaan.
 
 Pertanyaan: ${question}
 
@@ -289,19 +268,7 @@ ${contexts.map((c, i) => `[${i + 1}] ${c}`).join("\n\n")}
 
 Tugas: Untuk setiap konteks, tentukan apakah mengandung informasi yang berguna untuk menjawab pertanyaan dengan benar.
 Hitung berapa banyak konteks yang relevan dan bagi dengan total konteks.
-Jawab HANYA dengan angka antara 0 dan 1.`
-                : `You are evaluating the precision of retrieved contexts for answering a question.
-
-Question: ${question}
-
-Ground Truth Answer: ${groundTruth}
-
-Retrieved Contexts:
-${contexts.map((c, i) => `[${i + 1}] ${c}`).join("\n\n")}
-
-Task: For each context, determine if it contains information useful for answering the question correctly.
-Count how many contexts are relevant and divide by total contexts.
-Respond with ONLY a number between 0 and 1.`;
+Jawab HANYA dengan angka antara 0 dan 1.`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -321,10 +288,7 @@ export async function calculateContextRecall(groundTruth: string, contexts: stri
     if (!groundTruth || contexts.length === 0) return 0;
 
     try {
-        const language = detectLanguage(groundTruth);
-        const prompt =
-            language === "id"
-                ? `Anda mengevaluasi recall dari konteks yang diambil.
+        const prompt = `Anda mengevaluasi recall dari konteks yang diambil.
 
 Jawaban Benar: ${groundTruth}
 
@@ -334,18 +298,7 @@ ${contexts.join("\n\n")}
 Tugas: Tentukan berapa persen informasi dalam jawaban benar yang tercakup oleh konteks yang diambil.
 Jawab HANYA dengan angka antara 0 dan 1.
 - 1.0 = Semua informasi dalam jawaban benar ada di konteks
-- 0.0 = Tidak ada informasi dari jawaban benar di konteks`
-                : `You are evaluating the recall of retrieved contexts.
-
-Ground Truth Answer: ${groundTruth}
-
-Retrieved Contexts:
-${contexts.join("\n\n")}
-
-Task: Determine what percentage of the information in the ground truth answer is covered by the retrieved contexts.
-Respond with ONLY a number between 0 and 1.
-- 1.0 = All information in ground truth is present in contexts
-- 0.0 = No information from ground truth is in contexts`;
+- 0.0 = Tidak ada informasi dari jawaban benar di konteks`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -372,10 +325,7 @@ export async function calculateAnswerCorrectness(answer: string, groundTruth: st
 
         const semanticSimilarity = cosineSimilarity(answerEmbed.embedding, truthEmbed.embedding);
 
-        const language = detectLanguage(answer + groundTruth);
-        const prompt =
-            language === "id"
-                ? `Anda membandingkan dua jawaban untuk kebenaran faktual.
+        const prompt = `Anda membandingkan dua jawaban untuk kebenaran faktual.
 
 Jawaban yang Dihasilkan: ${answer}
 
@@ -383,16 +333,7 @@ Jawaban Benar: ${groundTruth}
 
 Tugas: Evaluasi seberapa benar secara faktual jawaban yang dihasilkan dibandingkan dengan jawaban benar.
 Pertimbangkan akurasi faktual dan kelengkapan.
-Jawab HANYA dengan angka antara 0 dan 1.`
-                : `You are comparing two answers for factual correctness.
-
-Generated Answer: ${answer}
-
-Ground Truth: ${groundTruth}
-
-Task: Evaluate how factually correct the generated answer is compared to the ground truth.
-Consider both factual accuracy and completeness.
-Respond with ONLY a number between 0 and 1.`;
+Jawab HANYA dengan angka antara 0 dan 1.`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -414,10 +355,7 @@ export async function calculateAcademicRigor(answer: string, contexts: string[])
     if (!answer) return 0;
 
     try {
-        const language = detectLanguage(answer);
-        const prompt =
-            language === "id"
-                ? `Evaluasi ketelitian akademis dari jawaban berikut dalam konteks pendidikan tinggi Indonesia.
+        const prompt = `Evaluasi ketelitian akademis dari jawaban berikut dalam konteks pendidikan tinggi Indonesia.
 
 Jawaban: ${answer}
 
@@ -430,21 +368,7 @@ Kriteria penilaian:
 4. Penggunaan istilah teknis yang benar
 5. Objektivitas dan netralitas
 
-Berikan skor 0-1. Jawab HANYA dengan angka.`
-                : `Evaluate the academic rigor of the following answer in an academic context.
-
-Answer: ${answer}
-
-Supporting context: ${contexts.slice(0, 3).join("\n")}
-
-Assessment criteria:
-1. Appropriate academic language use
-2. Logical argument structure
-3. Depth of analysis
-4. Correct technical terminology
-5. Objectivity and neutrality
-
-Provide a score from 0-1. Respond with ONLY a number.`;
+Berikan skor 0-1. Jawab HANYA dengan angka.`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -464,10 +388,7 @@ export async function calculateCitationAccuracy(answer: string, contexts: string
     if (!answer || contexts.length === 0) return 0;
 
     try {
-        const language = detectLanguage(answer);
-        const prompt =
-            language === "id"
-                ? `Evaluasi akurasi sitasi dan referensi dalam jawaban berikut.
+        const prompt = `Evaluasi akurasi sitasi dan referensi dalam jawaban berikut.
 
 Jawaban: ${answer}
 
@@ -479,20 +400,7 @@ Kriteria:
 3. Apakah tidak ada fabrikasi referensi?
 4. Apakah kutipan akurat terhadap sumber asli?
 
-Berikan skor 0-1. Jawab HANYA dengan angka.`
-                : `Evaluate the citation accuracy in the following answer.
-
-Answer: ${answer}
-
-Source contexts: ${contexts.join("\n\n")}
-
-Criteria:
-1. Do main claims have support from context?
-2. Are source attributions done correctly?
-3. Are there no fabricated references?
-4. Are quotes accurate to original sources?
-
-Provide a score from 0-1. Respond with ONLY a number.`;
+Berikan skor 0-1. Jawab HANYA dengan angka.`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -516,12 +424,9 @@ export async function calculateTerminologyCorrectness(
     if (!answer) return 0;
 
     try {
-        const language = detectLanguage(answer);
-        const domainContext = domain || "academic/university";
+        const domainContext = domain || "akademik/universitas";
 
-        const prompt =
-            language === "id"
-                ? `Evaluasi ketepatan penggunaan terminologi dalam jawaban untuk domain ${domainContext}.
+        const prompt = `Evaluasi ketepatan penggunaan terminologi dalam jawaban untuk domain ${domainContext}.
 
 Jawaban: ${answer}
 
@@ -534,21 +439,7 @@ Kriteria:
 4. Konsistensi dengan terminologi standar di bidang terkait
 5. Penggunaan singkatan yang tepat
 
-Berikan skor 0-1. Jawab HANYA dengan angka.`
-                : `Evaluate the terminology correctness in the answer for ${domainContext} domain.
-
-Answer: ${answer}
-
-Reference context: ${contexts.slice(0, 2).join("\n")}
-
-Criteria:
-1. Correct and consistent use of technical terms
-2. Accurate definitions
-3. No jargon misuse
-4. Consistency with standard terminology
-5. Proper abbreviation usage
-
-Provide a score from 0-1. Respond with ONLY a number.`;
+Berikan skor 0-1. Jawab HANYA dengan angka.`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -568,10 +459,7 @@ export async function calculateHallucinationRate(answer: string, contexts: strin
     if (!answer) return 1; // No answer = 100% hallucination
 
     try {
-        const language = detectLanguage(answer);
-        const prompt =
-            language === "id"
-                ? `Analisis jawaban berikut untuk mendeteksi halusinasi (informasi yang dibuat-buat atau tidak akurat).
+        const prompt = `Analisis jawaban berikut untuk mendeteksi halusinasi (informasi yang dibuat-buat atau tidak akurat).
 
 Jawaban: ${answer}
 
@@ -584,21 +472,7 @@ Identifikasi:
 4. Generalisasi berlebihan tanpa dasar
 
 Berikan TINGKAT HALUSINASI 0-1 (0 = tidak ada halusinasi, 1 = sepenuhnya halusinasi).
-Jawab HANYA dengan angka.`
-                : `Analyze the following answer for hallucinations (fabricated or inaccurate information).
-
-Answer: ${answer}
-
-Available context: ${contexts.join("\n\n")}
-
-Identify:
-1. Facts not in context and unverifiable
-2. Claims contradicting context
-3. Unsupported specific details (numbers, names, dates)
-4. Excessive generalizations without basis
-
-Provide HALLUCINATION RATE 0-1 (0 = no hallucination, 1 = fully hallucinated).
-Respond with ONLY a number.`;
+Jawab HANYA dengan angka.`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -619,10 +493,7 @@ export async function calculateFactualConsistency(answer: string, contexts: stri
 
     try {
         // Use NLI-style approach: check if answer is entailed by contexts
-        const language = detectLanguage(answer);
-        const prompt =
-            language === "id"
-                ? `Evaluasi konsistensi faktual menggunakan pendekatan Natural Language Inference.
+        const prompt = `Evaluasi konsistensi faktual menggunakan pendekatan Natural Language Inference.
 
 Premis (Konteks):
 ${contexts.join("\n\n")}
@@ -634,20 +505,7 @@ Tentukan hubungan:
 - NEUTRAL (0.5): Jawaban tidak bertentangan tapi tidak sepenuhnya didukung
 - CONTRADICTION (0.0): Jawaban bertentangan dengan konteks
 
-Berikan skor 0-1 berdasarkan tingkat entailment. Jawab HANYA dengan angka.`
-                : `Evaluate factual consistency using Natural Language Inference approach.
-
-Premise (Context):
-${contexts.join("\n\n")}
-
-Hypothesis (Answer): ${answer}
-
-Determine relationship:
-- ENTAILMENT (1.0): Answer fully supported by context
-- NEUTRAL (0.5): Answer doesn't contradict but not fully supported
-- CONTRADICTION (0.0): Answer contradicts context
-
-Provide score 0-1 based on entailment level. Respond with ONLY a number.`;
+Berikan skor 0-1 berdasarkan tingkat entailment. Jawab HANYA dengan angka.`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -668,10 +526,7 @@ export async function calculateSourceAttribution(answer: string, contexts: strin
 
     try {
         // Check if claims are properly attributed to sources
-        const language = detectLanguage(answer);
-        const prompt =
-            language === "id"
-                ? `Evaluasi atribusi sumber dalam jawaban.
+        const prompt = `Evaluasi atribusi sumber dalam jawaban.
 
 Jawaban: ${answer}
 
@@ -683,20 +538,7 @@ Kriteria:
 3. Apakah atribusi akurat (tidak salah mengaitkan)?
 4. Apakah pembaca dapat memverifikasi klaim dari sumber?
 
-Berikan skor 0-1. Jawab HANYA dengan angka.`
-                : `Evaluate source attribution in the answer.
-
-Answer: ${answer}
-
-Available sources: ${contexts.length} contexts
-
-Criteria:
-1. Are important claims attributed to sources?
-2. Are there no unattributed claims that should be sourced?
-3. Are attributions accurate (not misattributed)?
-4. Can readers verify claims from sources?
-
-Provide score 0-1. Respond with ONLY a number.`;
+Berikan skor 0-1. Jawab HANYA dengan angka.`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
@@ -716,10 +558,7 @@ export async function calculateContradictionScore(answer: string, contexts: stri
     if (!answer || contexts.length === 0) return 0;
 
     try {
-        const language = detectLanguage(answer);
-        const prompt =
-            language === "id"
-                ? `Deteksi kontradiksi dalam jawaban terhadap konteks sumber.
+        const prompt = `Deteksi kontradiksi dalam jawaban terhadap konteks sumber.
 
 Jawaban: ${answer}
 
@@ -733,22 +572,7 @@ Identifikasi kontradiksi:
 4. Pernyataan yang saling bertentangan dalam jawaban itu sendiri
 
 Berikan skor KEBEBASAN KONTRADIKSI 0-1 (1 = tidak ada kontradiksi, 0 = kontradiksi berat).
-Jawab HANYA dengan angka.`
-                : `Detect contradictions in the answer against source context.
-
-Answer: ${answer}
-
-Context:
-${contexts.join("\n\n")}
-
-Identify contradictions:
-1. Direct contradictions with facts in context
-2. Logical inconsistencies
-3. Conflicting numbers or data
-4. Self-contradicting statements within the answer
-
-Provide CONTRADICTION-FREE score 0-1 (1 = no contradictions, 0 = severe contradictions).
-Respond with ONLY a number.`;
+Jawab HANYA dengan angka.`;
 
         const { text } = await generateText({
             model: CHAT_MODEL,
