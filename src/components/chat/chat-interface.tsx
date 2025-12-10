@@ -12,7 +12,6 @@ import {
     Clock,
     Database,
     FileText,
-    GraduationCap,
     Languages,
     Loader2,
     RefreshCw,
@@ -21,6 +20,7 @@ import {
     Shield,
     Sparkles,
     Target,
+    Trash2,
     User,
     Zap,
 } from "lucide-react";
@@ -256,7 +256,6 @@ const SourcesCollapsible = memo(function SourcesCollapsibleComponent({ chunks }:
 });
 
 const ChatHeader = memo(function ChatHeaderComponent({
-    settings,
     detectedLanguage,
     latencyMs,
 }: {
@@ -266,22 +265,6 @@ const ChatHeader = memo(function ChatHeaderComponent({
 }) {
     return (
         <div className="flex items-center justify-between">
-            <div className="flex items-center gap-3">
-                <div className="rounded-lg bg-primary/10 p-2">
-                    <GraduationCap className="h-5 w-5 text-primary" />
-                </div>
-                <div>
-                    <h2 className="font-semibold text-foreground">MuliaChat</h2>
-                    <p className="text-muted-foreground text-sm">
-                        {(() => {
-                            if (settings.useAgenticMode) return "Agentic RAG + Okapi BM25";
-                            if (settings.useRag) return "Standard RAG";
-                            return "Direct LLM";
-                        })()} • EN/ID
-                    </p>
-                </div>
-            </div>
-
             <div className="flex items-center gap-2">
                 {detectedLanguage && (
                     <Badge className="gap-1" variant="outline">
@@ -303,7 +286,7 @@ const ChatHeader = memo(function ChatHeaderComponent({
 const EmptyState = memo(function EmptyStateComponent() {
     return (
         <div className="py-12 text-center">
-            <div className="mx-auto mb-4 w-fit rounded-full bg-primary/10 p-4">
+            <div className="mx-auto mb-4 w-fit rounded-full bg-primary/10 p-4 pt-0">
                 <BookOpen className="h-8 w-8 text-primary" />
             </div>
             <h3 className="mb-2 font-medium text-foreground text-lg">Welcome to MuliaChat</h3>
@@ -315,22 +298,36 @@ const EmptyState = memo(function EmptyStateComponent() {
     );
 });
 
-function useAgenticChat(
-    messages: Message[],
-    updateMessages: (msgs: Message[] | ((prev: Message[]) => Message[])) => void,
-    sessionId: string | undefined,
+function useAgenticChat(options: {
+    messages: Message[];
+    updateMessages: (msgs: Message[] | ((prev: Message[]) => Message[])) => void;
+    sessionId: string | undefined;
     settings: {
         useRag: boolean;
         retrievalStrategy: "vector" | "keyword" | "hybrid";
         enableGuardrails: boolean;
-    },
-    setAgentSteps: (steps: AgentStep[]) => void,
-    setRetrievedChunks: (chunks: RetrievedChunk[]) => void,
-    setLatencyMs: (ms: number) => void,
-    setDetectedLanguage: (lang: "en" | "id" | null) => void,
-    setError: (err: string | null) => void,
-    setLoading: (loading: boolean) => void
-) {
+    };
+    setAgentSteps: (steps: AgentStep[]) => void;
+    setRetrievedChunks: (chunks: RetrievedChunk[]) => void;
+    setLatencyMs: (ms: number) => void;
+    setDetectedLanguage: (lang: "en" | "id" | null) => void;
+    setError: (err: string | null) => void;
+    setLoading: (loading: boolean) => void;
+    scrollRef: React.RefObject<HTMLDivElement | null>;
+}) {
+    const {
+        messages,
+        updateMessages,
+        sessionId,
+        settings,
+        setAgentSteps,
+        setRetrievedChunks,
+        setLatencyMs,
+        setDetectedLanguage,
+        setError,
+        setLoading,
+        scrollRef,
+    } = options;
     return useCallback(
         async (userMessage: string) => {
             setLoading(true);
@@ -343,9 +340,8 @@ function useAgenticChat(
                 ...prev,
                 {
                     id: crypto.randomUUID(),
-                    role: "user",
-                    content: userMessage,
-                    parts: [{ type: "text", text: userMessage }],
+                    role: "user" as const,
+                    parts: [{ type: "text" as const, text: userMessage }],
                 },
             ]);
 
@@ -364,34 +360,40 @@ function useAgenticChat(
                 });
 
                 const data = await res.json();
+                console.log("[useAgenticChat] Response data:", data);
 
                 if (data.error) {
                     setError(data.error);
-                    updateMessages((prev: Message[]) => [
-                        ...prev,
-                        {
-                            id: crypto.randomUUID(),
-                            role: "assistant",
-                            content: `Error: ${data.error}`,
-                            parts: [{ type: "text", text: `Error: ${data.error}` }],
-                        },
-                    ]);
+                    const errorMessage: Message = {
+                        id: crypto.randomUUID(),
+                        role: "assistant" as const,
+                        parts: [{ type: "text" as const, text: `Error: ${data.error}` }],
+                    };
+                    console.log("[useAgenticChat] Adding error message:", errorMessage);
+                    updateMessages((prev: Message[]) => [...prev, errorMessage]);
                 } else {
-                    updateMessages((prev: Message[]) => [
-                        ...prev,
-                        {
-                            id: crypto.randomUUID(),
-                            role: "assistant",
-                            content: data.content,
-                            parts: [{ type: "text", text: data.content }],
-                        },
-                    ]);
+                    console.log("[useAgenticChat] Adding assistant message:", data.content);
+                    const assistantMessage: Message = {
+                        id: crypto.randomUUID(),
+                        role: "assistant" as const,
+                        parts: [{ type: "text" as const, text: data.content }],
+                    };
+                    console.log("[useAgenticChat] Assistant message object:", assistantMessage);
+                    updateMessages((prev: Message[]) => {
+                        const newMessages = [...prev, assistantMessage];
+                        console.log("[useAgenticChat] Previous messages count:", prev.length);
+                        console.log("[useAgenticChat] New messages count:", newMessages.length);
+                        console.log("[useAgenticChat] Full messages array:", newMessages);
+                        return newMessages;
+                    });
                     setAgentSteps(data.steps || []);
                     setRetrievedChunks(data.retrievedChunks || []);
                     setLatencyMs(data.latencyMs);
                     if (data.language) {
                         setDetectedLanguage(data.language);
                     }
+                    // Scroll to bottom after message is added
+                    setTimeout(() => scrollRef.current?.scrollIntoView({ behavior: "smooth" }), 100);
                 }
             } catch (err) {
                 setError(err instanceof Error ? err.message : "Unknown error");
@@ -410,6 +412,7 @@ function useAgenticChat(
             setRetrievedChunks,
             setLatencyMs,
             setDetectedLanguage,
+            scrollRef,
         ]
     );
 }
@@ -421,6 +424,7 @@ const ChatInput = memo(function ChatInputComponent({
     onInputChange,
     onSubmit,
     onReload,
+    onClear,
 }: {
     input: string;
     isLoading: boolean;
@@ -428,6 +432,7 @@ const ChatInput = memo(function ChatInputComponent({
     onInputChange: (e: React.ChangeEvent<HTMLTextAreaElement>) => void;
     onSubmit: (e: React.FormEvent) => void;
     onReload: () => void;
+    onClear: () => void;
 }) {
     return (
         <div className="border-border border-t bg-card p-4">
@@ -447,9 +452,28 @@ const ChatInput = memo(function ChatInputComponent({
                     />
                     <div className="absolute right-2 bottom-2 flex gap-2">
                         {messagesExist && (
-                            <Button disabled={isLoading} onClick={onReload} size="icon" type="button" variant="ghost">
-                                <RefreshCw className="h-4 w-4" />
-                            </Button>
+                            <>
+                                <Button
+                                    disabled={isLoading}
+                                    onClick={onClear}
+                                    size="icon"
+                                    title="Clear messages"
+                                    type="button"
+                                    variant="ghost"
+                                >
+                                    <Trash2 className="h-4 w-4" />
+                                </Button>
+                                <Button
+                                    disabled={isLoading}
+                                    onClick={onReload}
+                                    size="icon"
+                                    title="Reload last message"
+                                    type="button"
+                                    variant="ghost"
+                                >
+                                    <RefreshCw className="h-4 w-4" />
+                                </Button>
+                            </>
                         )}
                         <Button disabled={isLoading || !input.trim()} size="icon" type="submit">
                             <Send className="h-4 w-4" />
@@ -479,6 +503,7 @@ const MessageList = memo(function MessageListComponent({
     settings: { useAgenticMode: boolean };
     scrollRef: React.RefObject<HTMLDivElement | null>;
 }) {
+    console.log("[MessageList] Rendering with", messages.length, "messages");
     return (
         <div className="mx-auto max-w-4xl space-y-4">
             {messages.length === 0 && <EmptyState />}
@@ -617,9 +642,19 @@ const SettingsPanel = memo(function SettingsPanelComponent({
 });
 
 function useChatLogic() {
-    const store = useChatStore();
-    const { settings, setSettings, isLoading: storeLoading, setLoading, error, setError } = store;
-    const { activeSession, createSession } = store;
+    const {
+        settings,
+        setSettings,
+        isLoading: storeLoading,
+        setLoading,
+        error,
+        setError,
+        activeSession,
+        createSession,
+        clearMessages,
+        sessions,
+        activeSessionId,
+    } = useChatStore();
 
     const scrollRef = useRef<HTMLDivElement>(null);
     const session = activeSession();
@@ -647,7 +682,20 @@ function useChatLogic() {
                 enableGuardrails: settings.enableGuardrails,
             }),
         }),
-        onFinish: () => {
+        onFinish: (message) => {
+            // Extract metadata from response if available
+            const metadata = (message as { experimental_metadata?: Record<string, unknown> }).experimental_metadata;
+            if (metadata) {
+                if (metadata.retrievedChunks) {
+                    setRetrievedChunks(metadata.retrievedChunks as RetrievedChunk[]);
+                }
+                if (metadata.latencyMs) {
+                    setLatencyMs(metadata.latencyMs as number);
+                }
+                if (metadata.language) {
+                    setDetectedLanguage(metadata.language as "en" | "id");
+                }
+            }
             scrollRef.current?.scrollIntoView({ behavior: "smooth" });
             setLoading(false);
         },
@@ -662,21 +710,61 @@ function useChatLogic() {
     }, []);
 
     useEffect(() => {
-        if (!session) createSession("New Chat");
-    }, [session, createSession]);
+        if (!session) {
+            (async () => {
+                try {
+                    // Create session in database first to get the DB-generated ID
+                    const response = await fetch("/api/sessions", {
+                        method: "POST",
+                        headers: { "Content-Type": "application/json" },
+                        body: JSON.stringify({
+                            title: "New Chat",
+                            useRag: settings.useRag,
+                            useAgenticMode: settings.useAgenticMode,
+                            retrievalStrategy: settings.retrievalStrategy,
+                        }),
+                    });
+                    const { session: dbSession } = await response.json();
 
-    const handleAgenticSubmit = useAgenticChat(
+                    // Store session with DB ID
+                    if (dbSession?.id) {
+                        useChatStore.setState((state) => ({
+                            sessions: [
+                                ...state.sessions,
+                                {
+                                    id: dbSession.id,
+                                    title: "New Chat",
+                                    messages: [],
+                                    createdAt: Date.now(),
+                                    updatedAt: Date.now(),
+                                    settings: { ...settings },
+                                },
+                            ],
+                            activeSessionId: dbSession.id,
+                        }));
+                    }
+                } catch (err) {
+                    console.error("Failed to create session:", err);
+                    // Fallback to local session only
+                    createSession("New Chat");
+                }
+            })();
+        }
+    }, [session, createSession, settings]);
+
+    const handleAgenticSubmit = useAgenticChat({
         messages,
-        setMessages,
-        session?.id,
+        updateMessages: setMessages,
+        sessionId: session?.id,
         settings,
         setAgentSteps,
         setRetrievedChunks,
         setLatencyMs,
         setDetectedLanguage,
         setError,
-        setLoading
-    );
+        setLoading,
+        scrollRef,
+    });
 
     const onSubmit = useCallback(
         async (e: React.FormEvent) => {
@@ -704,6 +792,18 @@ function useChatLogic() {
         if (text) setInput(text);
     }, [messages]);
 
+    const handleClear = useCallback(() => {
+        if (window.confirm("Clear all messages? This cannot be undone.")) {
+            clearMessages();
+            setMessages([]);
+            setAgentSteps([]);
+            setRetrievedChunks([]);
+            setLatencyMs(null);
+            setDetectedLanguage(null);
+            setError(null);
+        }
+    }, [clearMessages, setMessages, setError]);
+
     return {
         settings,
         setSettings,
@@ -720,6 +820,7 @@ function useChatLogic() {
         handleInputChange,
         onSubmit,
         handleReload,
+        handleClear,
     };
 }
 
@@ -740,6 +841,7 @@ export function ChatInterface() {
         handleInputChange,
         onSubmit,
         handleReload,
+        handleClear,
     } = useChatLogic();
 
     return (
@@ -771,6 +873,7 @@ export function ChatInterface() {
                 input={input}
                 isLoading={isLoading}
                 messagesExist={messages.length > 0}
+                onClear={handleClear}
                 onInputChange={handleInputChange}
                 onReload={handleReload}
                 onSubmit={onSubmit}

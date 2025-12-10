@@ -33,7 +33,7 @@ export async function POST(request: Request) {
         const lastMessage = messages.at(-1);
         const userMessage =
             lastMessage?.parts
-                .filter((part) => part.type === "text")
+                ?.filter((part) => part.type === "text")
                 .map((part) => (part.type === "text" ? part.text : ""))
                 .join(" ") || "";
         const language = detectQueryLanguage(userMessage);

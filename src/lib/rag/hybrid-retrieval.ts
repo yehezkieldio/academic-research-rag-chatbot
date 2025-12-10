@@ -561,7 +561,7 @@ function buildResults(
  */
 export async function hybridRetrieve(query: string, options: HybridRetrievalOptions = {}): Promise<RetrievalResult[]> {
     console.log("[hybridRetrieve] Starting hybrid retrieval pipeline");
-    console.time("Hybrid_Retrieval");
+    console.time("hybridRetrieve");
     const opts = { ...DEFAULT_OPTIONS, ...options };
     console.log(
         `[hybridRetrieve] Options - strategy: ${opts.strategy}, topK: ${opts.topK}, language: ${opts.language}`
@@ -582,7 +582,7 @@ export async function hybridRetrieve(query: string, options: HybridRetrievalOpti
 
         if (vectorResults.length === 0) {
             console.log("[hybridRetrieve] No vector results found");
-            console.timeEnd("Hybrid_Retrieval");
+            console.timeEnd("hybridRetrieve");
             return [];
         }
 
@@ -619,7 +619,7 @@ export async function hybridRetrieve(query: string, options: HybridRetrievalOpti
 
         if (allChunks.length === 0) {
             console.log("[hybridRetrieve] No chunks found for BM25");
-            console.timeEnd("Hybrid_Retrieval");
+            console.timeEnd("hybridRetrieve");
             return [];
         }
 
@@ -658,7 +658,7 @@ export async function hybridRetrieve(query: string, options: HybridRetrievalOpti
     console.log(
         `[hybridRetrieve] Final results: ${finalResults.length} (min score: ${opts.minScore}, topK: ${opts.topK})`
     );
-    console.timeEnd("Hybrid_Retrieval");
+    console.timeEnd("hybridRetrieve");
     return finalResults;
 }
 
