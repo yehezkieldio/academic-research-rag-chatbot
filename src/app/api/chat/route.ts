@@ -63,6 +63,8 @@ export async function POST(request: Request) {
             useAgenticMode = true,
             retrievalStrategy = "hybrid",
             enableGuardrails = true,
+            useReranker = true,
+            rerankerStrategy = "cross_encoder",
         }: {
             messages: UIMessage[];
             sessionId?: string;
@@ -70,10 +72,12 @@ export async function POST(request: Request) {
             useAgenticMode?: boolean;
             retrievalStrategy?: "vector" | "keyword" | "hybrid";
             enableGuardrails?: boolean;
+            useReranker?: boolean;
+            rerankerStrategy?: "cross_encoder" | "llm" | "llm_listwise" | "cohere" | "ensemble" | "none";
         } = await request.json();
 
         console.log(
-            `[POST] Parsed request - sessionId: ${sessionId}, useRag: ${useRag}, useAgenticMode: ${useAgenticMode}, retrievalStrategy: ${retrievalStrategy}, enableGuardrails: ${enableGuardrails}`
+            `[POST] Parsed request - sessionId: ${sessionId}, useRag: ${useRag}, useAgenticMode: ${useAgenticMode}, retrievalStrategy: ${retrievalStrategy}, enableGuardrails: ${enableGuardrails}, useReranker: ${useReranker}, rerankerStrategy: ${rerankerStrategy}`
         );
 
         const lastMessage = messages.at(-1);
@@ -178,6 +182,8 @@ export async function POST(request: Request) {
                 sessionId,
                 retrievalStrategy,
                 enableGuardrails,
+                useReranker,
+                rerankerStrategy,
             });
 
             const { stream, steps, retrievedChunks, citations, language: detectedLanguage } = agentResult;
@@ -314,6 +320,8 @@ export async function POST(request: Request) {
                 minSimilarity: 0.3,
                 maxTokens: 4000,
                 strategy: retrievalStrategy,
+                useReranker,
+                rerankerStrategy,
             });
 
             retrievedChunks = contextResult.chunks;

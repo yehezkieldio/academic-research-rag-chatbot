@@ -196,9 +196,17 @@ const ACADEMIC_SYNONYM_GROUPS: SynonymGroup[] = [
     },
 ];
 
-export function detectQueryLanguage(_query: string): "id" {
-    // Always return Indonesian - system is Indonesian-only
-    return "id";
+import { detectQueryLanguage as detectLang } from "@/lib/utils/language";
+
+/**
+ * Detects the language of a query.
+ * Always returns Indonesian as the system is Indonesian-only.
+ *
+ * @param query - The query text
+ * @returns Always returns "id" for Indonesian
+ */
+export function detectQueryLanguage(query: string): "id" {
+    return detectLang(query);
 }
 
 // Internal detectLanguage for document content (more thorough check)

@@ -147,6 +147,8 @@ function createSearchTool(language: "id", streamingState?: StreamingState) {
                 strategy,
                 topK,
                 language,
+                useReranker: true,
+                rerankerStrategy: "cross_encoder",
             });
             console.log(
                 `[searchTool] Retrieved ${results.length} results with average score ${(results.reduce((sum, r) => sum + r.fusedScore, 0) / results.length).toFixed(3)}`
@@ -320,6 +322,7 @@ export async function runAgenticRag(
         enableGuardrails?: boolean;
         maxSteps?: number;
         rerankerStrategy?: RerankerStrategy;
+        useReranker?: boolean;
         streamCallback?: (step: AgentStep) => void;
     } = {}
 ): Promise<AgenticRagResult> {
@@ -685,6 +688,8 @@ export async function streamAgenticRag(
         retrievalStrategy?: "vector" | "keyword" | "hybrid";
         enableGuardrails?: boolean;
         maxSteps?: number;
+        useReranker?: boolean;
+        rerankerStrategy?: RerankerStrategy;
     } = {}
 ) {
     const {
@@ -711,6 +716,8 @@ export async function streamAgenticRag(
         strategy: retrievalStrategy,
         topK: 5,
         language,
+        useReranker: true,
+        rerankerStrategy: "cross_encoder",
     });
 
     // Add to streaming state

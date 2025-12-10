@@ -1,5 +1,4 @@
 import { createAzure } from "@ai-sdk/azure";
-import { extractReasoningMiddleware, wrapLanguageModel } from "ai";
 import { env } from "@/lib/env";
 
 export const azure = createAzure({
@@ -14,13 +13,6 @@ export const AZURE_EMBEDDING_MODEL = azure.textEmbedding(env.AZURE_OPENAI_EMBEDD
 export const CHAT_MODEL = AZURE_CHAT_MODEL;
 export const EMBEDDING_MODEL = AZURE_EMBEDDING_MODEL;
 
-export function createModel() {
-    return wrapLanguageModel({
-        model: CHAT_MODEL,
-        middleware: [extractReasoningMiddleware({ tagName: "think" })],
-    });
-}
-
 export const telemetryConfig = {
     isEnabled: env.NODE_ENV === "production",
     functionId: "muliachat-academic-research-rag",
@@ -29,18 +21,3 @@ export const telemetryConfig = {
         version: "1.0.0",
     },
 };
-
-export function getModelForTask(task: "chat" | "embedding" | "evaluation" | "rerank") {
-    switch (task) {
-        case "chat":
-            return AZURE_CHAT_MODEL;
-        case "embedding":
-            return AZURE_EMBEDDING_MODEL;
-        case "evaluation":
-            return AZURE_CHAT_MODEL;
-        case "rerank":
-            return AZURE_CHAT_MODEL;
-        default:
-            return AZURE_CHAT_MODEL;
-    }
-}

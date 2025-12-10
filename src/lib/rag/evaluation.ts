@@ -1041,6 +1041,7 @@ async function executeRagPipeline(
             retrievalStrategy: config.retrievalStrategy,
             enableGuardrails: config.useGuardrails,
             maxSteps: 5,
+            useReranker: config.useReranker,
             rerankerStrategy: config.rerankerStrategy as RerankerStrategy | undefined,
         });
 
@@ -1062,6 +1063,8 @@ async function executeRagPipeline(
         strategy: config.retrievalStrategy,
         topK: config.topK,
         language: config.language,
+        useReranker: config.useReranker,
+        rerankerStrategy: config.rerankerStrategy as RerankerStrategy | undefined,
     });
 
     const contexts = retrievalResults.map((r) => r.content);
@@ -1079,6 +1082,8 @@ async function executeRagPipeline(
         topK: config.topK,
         strategy: config.retrievalStrategy,
         language: config.language,
+        useReranker: config.useReranker,
+        rerankerStrategy: config.rerankerStrategy as RerankerStrategy | undefined,
     });
 
     latencyTracker.mark("generation");

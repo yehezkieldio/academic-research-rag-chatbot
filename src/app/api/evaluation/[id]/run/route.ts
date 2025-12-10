@@ -46,6 +46,8 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
                     topK: 5,
                     minSimilarity: 0.3, // Lower threshold for better recall
                     strategy: "hybrid",
+                    useReranker: true,
+                    rerankerStrategy: "cross_encoder",
                 });
 
                 const ragPrompt = buildRagPrompt(SYSTEM_PROMPTS.rag, contextResult.context, question.question);

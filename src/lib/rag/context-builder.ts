@@ -37,7 +37,9 @@ export async function retrieveContext(
         strategy?: "vector" | "keyword" | "hybrid";
         vectorWeight?: number;
         bm25Weight?: number;
-        language?: "en" | "id" | "auto"; // Added language option
+        language?: "en" | "id" | "auto";
+        useReranker?: boolean;
+        rerankerStrategy?: "cross_encoder" | "llm" | "llm_listwise" | "cohere" | "ensemble" | "none";
     } = {}
 ): Promise<ContextResult> {
     console.log(`[retrieveContext] Starting context retrieval - query: "${query.substring(0, 80)}..."`);
@@ -49,6 +51,8 @@ export async function retrieveContext(
         vectorWeight = 0.6,
         bm25Weight = 0.4,
         language = "auto",
+        useReranker = true,
+        rerankerStrategy = "cross_encoder",
     } = options;
 
     console.log(
@@ -63,7 +67,9 @@ export async function retrieveContext(
         strategy,
         vectorWeight,
         bm25Weight,
-        language, // Pass language for BM25 tokenization
+        language,
+        useReranker: options.useReranker ?? true,
+        rerankerStrategy: options.rerankerStrategy ?? "cross_encoder",
     });
     console.log(`[retrieveContext] Hybrid retrieval returned ${results.length} results`);
 
@@ -118,16 +124,8 @@ export async function retrieveContext(
     };
 }
 
-// Pre-compiled regex patterns for performance
-const INDONESIAN_PATTERNS = [
-    /\b(apa|bagaimana|mengapa|kapan|dimana|siapa|jelaskan)\b/i,
-    /\b(yang|dengan|untuk|dalam|adalah|dapat)\b/i,
-];
-
-function detectQueryLanguage(_query: string): "id" {
-    // Always return Indonesian - system is Indonesian-only
-    return "id";
-}
+// Import from centralized language utility
+import { detectQueryLanguage } from "@/lib/utils/language";
 
 // Build the final prompt with context
 export function buildRagPrompt(

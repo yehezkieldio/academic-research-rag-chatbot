@@ -2,6 +2,7 @@ import { and, isNotNull, sql } from "drizzle-orm";
 import { generateEmbedding } from "@/lib/ai/embeddings";
 import { db } from "@/lib/db";
 import { documentChunks, documents } from "@/lib/db/schema";
+import { type RerankerStrategy, rerank } from "./reranker";
 
 export interface RetrievalResult {
     chunkId: string;
@@ -27,6 +28,11 @@ export interface HybridRetrievalOptions {
     strategy?: "vector" | "keyword" | "hybrid";
     rrfK?: number;
     language?: "en" | "id" | "auto";
+    // Reranker options
+    useReranker?: boolean;
+    rerankerStrategy?: RerankerStrategy;
+    rerankerTopK?: number;
+    rerankerMinScore?: number;
 }
 
 export interface ExtractKeywordsOptions {
@@ -41,6 +47,10 @@ const DEFAULT_OPTIONS: Required<HybridRetrievalOptions> = {
     strategy: "hybrid",
     rrfK: 60,
     language: "auto",
+    useReranker: true,
+    rerankerStrategy: "cross_encoder",
+    rerankerTopK: 5,
+    rerankerMinScore: 0.3,
 };
 
 const BM25_K1 = 1.2;
@@ -52,226 +62,23 @@ const BM25_DELTA = 1;
 const WHITESPACE_REGEX = /\s+/;
 const SPECIAL_CHARS_REGEX = /[^\w\s\u00C0-\u024F]/g;
 
-const INDONESIAN_STOP_WORDS = new Set([
-    "dan",
-    "atau",
-    "yang",
-    "di",
-    "ke",
-    "dari",
-    "ini",
-    "itu",
-    "dengan",
-    "untuk",
-    "pada",
-    "adalah",
-    "sebagai",
-    "dalam",
-    "tidak",
-    "akan",
-    "dapat",
-    "telah",
-    "oleh",
-    "juga",
-    "sudah",
-    "saat",
-    "setelah",
-    "bisa",
-    "ada",
-    "mereka",
-    "kami",
-    "kita",
-    "saya",
-    "anda",
-    "ia",
-    "dia",
-    "kamu",
-    "beliau",
-    "tersebut",
-    "hal",
-    "antara",
-    "lain",
-    "seperti",
-    "serta",
-    "bahwa",
-    "karena",
-    "secara",
-    "namun",
-    "tetapi",
-    "hanya",
-    "jika",
-    "maka",
-    "agar",
-    "ketika",
-    "hingga",
-    "sampai",
-    "masih",
-    "pun",
-    "lagi",
-    "sangat",
-    "lebih",
-    "kurang",
-    "hampir",
-    "selalu",
-    "sering",
-    "kadang",
-    "jarang",
-    "begitu",
-    "demikian",
-    "yakni",
-    "yaitu",
-    "penelitian",
-    "berdasarkan",
-    "menurut",
-    "menunjukkan",
-    "menggunakan",
-    "terhadap",
-    "melalui",
-    "terdapat",
-    "merupakan",
-    "dilakukan",
-    "diperoleh",
-    "apa",
-    "siapa",
-    "dimana",
-    "kapan",
-    "mengapa",
-    "bagaimana",
-    "berapa",
-]);
-
-const ENGLISH_STOP_WORDS = new Set([
-    "the",
-    "a",
-    "an",
-    "and",
-    "or",
-    "but",
-    "in",
-    "on",
-    "at",
-    "to",
-    "for",
-    "of",
-    "with",
-    "by",
-    "from",
-    "up",
-    "about",
-    "into",
-    "through",
-    "during",
-    "before",
-    "after",
-    "above",
-    "below",
-    "between",
-    "under",
-    "again",
-    "further",
-    "then",
-    "once",
-    "here",
-    "there",
-    "when",
-    "where",
-    "why",
-    "how",
-    "all",
-    "each",
-    "few",
-    "more",
-    "most",
-    "other",
-    "some",
-    "such",
-    "no",
-    "nor",
-    "not",
-    "only",
-    "own",
-    "same",
-    "so",
-    "than",
-    "too",
-    "very",
-    "can",
-    "will",
-    "just",
-    "should",
-    "now",
-    "also",
-    "been",
-    "being",
-    "have",
-    "has",
-    "had",
-    "having",
-    "do",
-    "does",
-    "did",
-    "doing",
-    "would",
-    "could",
-    "might",
-    "must",
-    "shall",
-    "this",
-    "that",
-    "these",
-    "those",
-    "is",
-    "are",
-    "was",
-    "were",
-    "be",
-    "it",
-    "its",
-    "as",
-    "if",
-]);
+// Import centralized language utilities
+// Use centralized language detection
+import { detectDocumentLanguage, getStopWords, stemIndonesian as stemWord } from "@/lib/utils/language";
 
 function detectLanguage(text: string): "en" | "id" {
-    const indonesianPatterns = [
-        /\b(yang|dengan|untuk|dalam|adalah|dapat|telah|sudah|akan)\b/gi,
-        /\b(berdasarkan|menurut|menunjukkan|menggunakan|terhadap|merupakan)\b/gi,
-        /\b(mahasiswa|universitas|fakultas|jurusan|skripsi|tesis)\b/gi,
-    ];
-
-    let indonesianScore = 0;
-    for (const pattern of indonesianPatterns) {
-        const matches = text.match(pattern);
-        indonesianScore += matches ? matches.length : 0;
-    }
-
-    return indonesianScore > 5 ? "id" : "en";
+    // For now, system is Indonesian-only
+    // This wrapper exists for potential future multilingual support
+    const result = detectDocumentLanguage(text);
+    // detectDocumentLanguage currently only returns "id"
+    // Cast to the broader type for potential future expansion
+    return result as "en" | "id";
 }
 
-function stemIndonesian(word: string): string {
-    let stem = word.toLowerCase();
-
-    const suffixes = ["kan", "an", "i", "lah", "kah", "nya"];
-    for (const suffix of suffixes) {
-        if (stem.endsWith(suffix) && stem.length > suffix.length + 2) {
-            stem = stem.slice(0, -suffix.length);
-            break;
-        }
-    }
-
-    const prefixes = ["meng", "mem", "men", "me", "peng", "pem", "pen", "pe", "di", "ter", "ber", "ke", "se"];
-
-    for (const prefix of prefixes) {
-        if (stem.startsWith(prefix) && stem.length > prefix.length + 2) {
-            stem = stem.slice(prefix.length);
-            break;
-        }
-    }
-
-    return stem;
-}
+// Use centralized stemming from language utilities
 
 function tokenize(text: string, language: "en" | "id" = "en"): string[] {
-    const stopWords = language === "id" ? INDONESIAN_STOP_WORDS : ENGLISH_STOP_WORDS;
+    const stopWords = getStopWords("id"); // System is Indonesian-only
 
     const tokens = text
         .toLowerCase()
@@ -281,7 +88,7 @@ function tokenize(text: string, language: "en" | "id" = "en"): string[] {
         .filter((token) => !stopWords.has(token));
 
     if (language === "id") {
-        return tokens.map(stemIndonesian);
+        return tokens.map(stemWord);
     }
 
     return tokens;
@@ -665,6 +472,36 @@ export async function hybridRetrieve(query: string, options: HybridRetrievalOpti
     console.log(
         `[hybridRetrieve:${retrievalId}] Final results: ${finalResults.length} (min score: ${opts.minScore}, topK: ${opts.topK})`
     );
+
+    // Apply reranking if enabled
+    if (opts.useReranker && opts.rerankerStrategy !== "none" && finalResults.length > 0) {
+        console.log(
+            `[hybridRetrieve:${retrievalId}] Applying reranker - strategy: ${opts.rerankerStrategy}, topK: ${opts.rerankerTopK}`
+        );
+        const reranked = await rerank(query, finalResults, {
+            strategy: opts.rerankerStrategy,
+            topK: opts.rerankerTopK,
+            minScore: opts.rerankerMinScore,
+            language: detectedLanguage,
+        });
+        console.log(
+            `[hybridRetrieve:${retrievalId}] Reranking complete - results: ${reranked.length}, avg score: ${(reranked.reduce((sum, r) => sum + r.rerankedScore, 0) / reranked.length).toFixed(3)}`
+        );
+        console.timeEnd(`hybridRetrieve:${retrievalId}`);
+        // Convert reranked results back to RetrievalResult format
+        return reranked.map((r) => ({
+            chunkId: r.chunkId,
+            documentId: r.documentId,
+            documentTitle: r.documentTitle,
+            content: r.content,
+            vectorScore: r.vectorScore,
+            bm25Score: r.bm25Score,
+            fusedScore: r.rerankedScore, // Use reranked score as fused score
+            retrievalMethod: r.retrievalMethod,
+            metadata: r.metadata,
+        }));
+    }
+
     console.timeEnd(`hybridRetrieve:${retrievalId}`);
     return finalResults;
 }
@@ -685,37 +522,15 @@ export function extractKeywords(text: string, options: ExtractKeywordsOptions = 
         .map(([term]) => term);
 }
 
+import { expandQueryIndonesian as expandQueryIndonesianImpl } from "./university-domain";
+
+/**
+ * Expands Indonesian queries with education-specific terms.
+ * Wrapper function that delegates to university-domain implementation.
+ *
+ * @param query - The original search query
+ * @returns Array of query variations with synonyms
+ */
 export function expandQueryIndonesian(query: string): string[] {
-    const synonyms: Record<string, string[]> = {
-        penelitian: ["riset", "studi", "kajian", "investigasi"],
-        mahasiswa: ["pelajar", "siswa", "peserta didik"],
-        dosen: ["pengajar", "guru besar", "profesor", "tenaga pengajar"],
-        skripsi: ["tugas akhir", "karya ilmiah", "thesis"],
-        tesis: ["thesis", "disertasi"],
-        metode: ["metodologi", "pendekatan", "cara", "teknik"],
-        hasil: ["temuan", "output", "keluaran", "outcome"],
-        analisis: ["pembahasan", "evaluasi", "pengkajian", "telaah"],
-        kesimpulan: ["simpulan", "konklusi", "ringkasan"],
-        hipotesis: ["dugaan", "asumsi", "perkiraan"],
-        variabel: ["parameter", "faktor", "unsur"],
-        data: ["informasi", "bukti", "fakta"],
-        signifikan: ["bermakna", "penting", "berarti"],
-        korelasi: ["hubungan", "keterkaitan", "relasi"],
-        dampak: ["pengaruh", "efek", "akibat"],
-        implementasi: ["penerapan", "pelaksanaan"],
-        evaluasi: ["penilaian", "assessment", "pengukuran"],
-    };
-
-    const expandedQueries = [query];
-    const lowerQuery = query.toLowerCase();
-
-    for (const [term, syns] of Object.entries(synonyms)) {
-        if (lowerQuery.includes(term)) {
-            for (const syn of syns) {
-                expandedQueries.push(query.replace(new RegExp(term, "gi"), syn));
-            }
-        }
-    }
-
-    return [...new Set(expandedQueries)];
+    return expandQueryIndonesianImpl(query);
 }
