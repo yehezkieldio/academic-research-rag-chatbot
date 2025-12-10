@@ -17,6 +17,7 @@ export async function POST(request: Request) {
         const chunkingStrategy = (formData.get("chunkingStrategy") as ChunkingStrategy) || "recursive";
         const documentType = (formData.get("documentType") as string) || "auto";
         const languageHint = (formData.get("languageHint") as "auto" | "en" | "id") || "auto";
+        const useMistralOcr = formData.get("useMistralOcr") === "true";
 
         if (!file) {
             return Response.json({ error: "No file provided" }, { status: 400 });
@@ -87,6 +88,7 @@ export async function POST(request: Request) {
                 wordCount: extractionResult.metadata?.wordCount,
             },
             chunkingStrategy,
+            useMistralOcr,
             processingStatus: "pending",
         };
 

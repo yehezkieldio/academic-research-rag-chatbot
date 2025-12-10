@@ -302,6 +302,12 @@ export function DocumentList() {
                                         <p className="font-medium">{selectedDoc.metadata.department}</p>
                                     </div>
                                 )}
+                                {selectedDoc.metadata?.pages && (
+                                    <div>
+                                        <p className="text-muted-foreground">Pages</p>
+                                        <p className="font-medium">{selectedDoc.metadata.pages}</p>
+                                    </div>
+                                )}
                                 {selectedDoc.metadata?.wordCount && (
                                     <div>
                                         <p className="text-muted-foreground">Word Count</p>

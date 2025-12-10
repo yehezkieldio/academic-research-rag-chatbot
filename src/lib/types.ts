@@ -2,6 +2,7 @@ export interface DocumentMetadata {
     author?: string;
     pages?: number;
     wordCount?: number;
+    chunksCount?: number;
     source?: string;
     tags?: string[];
     category?: string;

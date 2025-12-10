@@ -42,7 +42,6 @@ interface DocumentUploaderProps {
     onUploadComplete?: () => void;
 }
 
-// biome-ignore lint/complexity/noExcessiveLinesPerFunction: WIP
 export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
     const [files, setFiles] = useState<UploadFile[]>([]);
     const [useMistralOcr, setUseMistralOcr] = useState(false);
