@@ -9,6 +9,7 @@ export const env = createEnv({
         AZURE_OPENAI_RESOURCE_NAME: z.string().min(1),
         AZURE_OPENAI_CHAT_DEPLOYMENT: z.string().min(1),
         AZURE_OPENAI_EMBEDDING_DEPLOYMENT: z.string().min(1),
+        AZURE_OPENAI_BASE_URL: z.string().min(1),
     },
     client: {},
     runtimeEnv: {
@@ -18,5 +19,6 @@ export const env = createEnv({
         AZURE_OPENAI_RESOURCE_NAME: process.env.AZURE_OPENAI_RESOURCE_NAME,
         AZURE_OPENAI_CHAT_DEPLOYMENT: process.env.AZURE_OPENAI_CHAT_DEPLOYMENT,
         AZURE_OPENAI_EMBEDDING_DEPLOYMENT: process.env.AZURE_OPENAI_EMBEDDING_DEPLOYMENT,
+        AZURE_OPENAI_BASE_URL: process.env.AZURE_OPENAI_BASE_URL,
     },
 });

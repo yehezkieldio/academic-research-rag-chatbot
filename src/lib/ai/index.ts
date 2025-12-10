@@ -5,6 +5,7 @@ import { env } from "@/lib/env";
 export const azure = createAzure({
     resourceName: env.AZURE_OPENAI_RESOURCE_NAME,
     apiKey: env.AZURE_OPENAI_API_KEY,
+    baseURL: env.AZURE_OPENAI_BASE_URL,
 });
 
 export const AZURE_CHAT_MODEL = azure(env.AZURE_OPENAI_CHAT_DEPLOYMENT);
