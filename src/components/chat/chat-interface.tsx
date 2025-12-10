@@ -86,7 +86,7 @@ const MessageBubble = memo(function MessageBubbleComponent({
     const isUser = message.role === "user";
 
     return (
-        <div className={cn("flex gap-3", isUser && "flex-row-reverse")}>
+        <div className={cn("flex w-full gap-3", isUser ? "flex-row-reverse justify-end" : "justify-start")}>
             <div
                 className={cn(
                     "flex h-8 w-8 shrink-0 items-center justify-center rounded-full",
