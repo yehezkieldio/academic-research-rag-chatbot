@@ -1,3 +1,24 @@
+/**
+ * Statistical test result with interpretation
+ *
+ * WHY Bilingual Fields:
+ * - Target audience includes Indonesian researchers
+ * - Facilitates academic reporting in local context
+ *
+ * @property testName - Test name in English
+ * @property testNameId - Test name in Indonesian
+ * @property statistic - Test statistic value (t, F, etc.)
+ * @property pValue - Significance probability
+ * @property significant - Whether p < alpha
+ * @property significanceLevel - Alpha threshold (typically 0.05)
+ * @property effectSize - Effect size measure (Cohen's d, eta-squared)
+ * @property effectSizeInterpretation - Effect magnitude label
+ * @property confidenceInterval - CI for parameter estimate
+ * @property degreesOfFreedom - Degrees of freedom
+ * @property sampleSize - Total sample size
+ * @property interpretation - English interpretation
+ * @property interpretationId - Indonesian interpretation
+ */
 export interface StatisticalResult {
     testName: string;
     testNameId: string;
@@ -14,6 +35,21 @@ export interface StatisticalResult {
     interpretationId: string;
 }
 
+/**
+ * Descriptive statistics summary
+ *
+ * @property mean - Arithmetic mean
+ * @property median - Middle value
+ * @property stdDev - Sample standard deviation
+ * @property variance - Sample variance
+ * @property min - Minimum value
+ * @property max - Maximum value
+ * @property range - Max - min
+ * @property n - Sample size
+ * @property sem - Standard error of mean (stdDev / sqrt(n))
+ * @property skewness - Distribution asymmetry (Fisher's)
+ * @property kurtosis - Distribution tailedness (excess kurtosis)
+ */
 export interface DescriptiveStats {
     mean: number;
     median: number;
@@ -28,7 +64,18 @@ export interface DescriptiveStats {
     kurtosis: number;
 }
 
-// Calculate descriptive statistics
+/**
+ * Calculate descriptive statistics for a dataset
+ *
+ * WHY: Provides comprehensive summary statistics for RAG evaluation metrics
+ * - Includes measures of central tendency (mean, median)
+ * - Dispersion (standard deviation, variance, range)
+ * - Distribution shape (skewness, kurtosis)
+ * - Inference support (standard error)
+ *
+ * @param data - Array of numeric values
+ * @returns Descriptive statistics object
+ */
 export function calculateDescriptiveStats(data: number[]): DescriptiveStats {
     const n = data.length;
     if (n === 0) {
@@ -482,7 +529,17 @@ function qToPValue(q: number, _k: number, _df: number): number {
     return 0.5;
 }
 
-// RAG-specific statistical analysis
+/**
+ * RAG vs Non-RAG comparison result
+ *
+ * @property metric - Metric name (English)
+ * @property metricId - Metric name (Indonesian)
+ * @property ragStats - Descriptive stats for RAG
+ * @property nonRagStats - Descriptive stats for Non-RAG
+ * @property testResult - Statistical test result
+ * @property improvement - Absolute improvement (RAG - Non-RAG)
+ * @property improvementPercent - Relative improvement percentage
+ */
 export interface RAGComparisonResult {
     metric: string;
     metricId: string;

@@ -1,7 +1,29 @@
 /**
- * Centralized language detection utilities
- * System is Indonesian-only, so this always returns "id"
- * This module exists to document the design decision and provide a single source of truth
+ * @fileoverview Centralized Language Detection and Processing Utilities
+ *
+ * WHY This Module:
+ * - Single source of truth for language detection (DRY principle)
+ * - Documents system constraint: Indonesian-only by design
+ * - Provides utilities for Indonesian NLP (stemming, stopwords)
+ * - Prevents scattered language detection logic across codebase
+ *
+ * WHY Indonesian-Only:
+ * - Target audience: Indonesian university students and researchers
+ * - LLM instructions explicitly set to Bahasa Indonesia
+ * - Stopwords, stemming, synonym expansion optimized for Indonesian
+ * - Future: Can extend to multilingual with minimal refactoring
+ *
+ * Design Decision:
+ * - detectQueryLanguage always returns "id" (hardcoded by design)
+ * - detectDocumentLanguage has heuristics but defaults to "id"
+ * - This explicit design choice is intentional, not a limitation
+ *
+ * Key Features:
+ * - Language type definition (currently only "id")
+ * - Query language detection (hardcoded to Indonesian)
+ * - Document language detection (heuristic-based, defaults to Indonesian)
+ * - Indonesian stopwords (common words to filter in BM25)
+ * - Simple Indonesian stemming (prefix/suffix removal)
  */
 
 export type Language = "id";

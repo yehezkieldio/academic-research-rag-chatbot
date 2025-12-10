@@ -1,3 +1,28 @@
+/**
+ * @fileoverview API Route: Document Upload
+ *
+ * WHY This Endpoint Exists:
+ * - Handles file upload for academic documents (PDF, DOCX, TXT, MD)
+ * - Extracts text content and metadata (course info, keywords, document type)
+ * - Initiates background processing for chunking and embedding generation
+ * - Supports OCR for scanned PDFs using Mistral's vision model
+ *
+ * Request/Response Flow:
+ * 1. Validate file type and size
+ * 2. Extract text content (with optional OCR for PDFs)
+ * 3. Detect document type (syllabus, lecture notes, research paper, etc.)
+ * 4. Extract academic metadata (course code, keywords, language)
+ * 5. Create database record with pending status
+ * 6. Trigger background processing (chunking → embedding → vector store)
+ * 7. Return success with document metadata
+ *
+ * Integration Points:
+ * - Frontend: DocumentUploader component handles multipart/form-data
+ * - Document Processor: Background worker for chunking and embedding
+ * - Vector Store: Qdrant for semantic search
+ * - OCR: Mistral Pixtral for scanned document processing
+ */
+
 import { db } from "@/lib/db";
 import { documents, type NewDocument } from "@/lib/db/schema";
 import type { ChunkingStrategy } from "@/lib/rag/chunking";
@@ -6,8 +31,62 @@ import type { AcademicDocumentType } from "@/lib/rag/university-domain";
 import { detectDocumentType, extractAcademicKeywords, extractCourseInfo } from "@/lib/rag/university-domain";
 import { detectDocumentLanguage } from "@/lib/rag/utils/language";
 
+/**
+ * Regular expression to extract file extension
+ */
 const FILE_NAME_EXTENSION_REGEX = /\.[^/.]+$/;
 
+/**
+ * POST /api/documents/upload
+ *
+ * WHY Async Processing:
+ * - Document processing (chunking, embedding) can take 30-60 seconds for large files
+ * - Immediate response improves UX - user doesn't wait for full processing
+ * - Background processing prevents timeout issues in serverless environments
+ *
+ * Request Body (multipart/form-data):
+ * - file: File (required) - Document file to upload (PDF, DOCX, TXT, MD)
+ * - category?: string - Document category for organization
+ * - tags?: string - Comma-separated tags
+ * - chunkingStrategy: ChunkingStrategy - Algorithm for text splitting (default: "recursive")
+ * - documentType: string - Manual type override or "auto" for detection
+ * - languageHint: "auto" | "en" | "id" - Language hint for processing (default: "auto")
+ * - useMistralOcr: boolean - Enable OCR for scanned PDFs (default: false)
+ *
+ * Response:
+ * - Success (200): {
+ *     success: true,
+ *     document: Document,
+ *     language: "en" | "id",
+ *     message: string
+ *   }
+ * - Error (400): { error: string } - Invalid file type or missing file
+ * - Error (500): { error: string } - Processing error
+ *
+ * Supported File Types:
+ * - PDF: Text-based and scanned (with OCR)
+ * - DOCX: Microsoft Word documents
+ * - TXT: Plain text files
+ * - MD: Markdown files
+ *
+ * @param request - Next.js request with multipart form data
+ * @returns JSON response with document metadata and processing status
+ * @throws Error - When file extraction or metadata processing fails
+ *
+ * @example
+ * ```typescript
+ * // Frontend usage
+ * const formData = new FormData();
+ * formData.append('file', file);
+ * formData.append('chunkingStrategy', 'recursive');
+ * formData.append('useMistralOcr', 'true');
+ *
+ * const response = await fetch('/api/documents/upload', {
+ *   method: 'POST',
+ *   body: formData
+ * });
+ * ```
+ */
 export async function POST(request: Request) {
     try {
         const formData = await request.formData();

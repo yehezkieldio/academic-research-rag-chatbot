@@ -1,3 +1,29 @@
+/**
+ * @fileoverview PDF Document Extraction Handler
+ *
+ * WHY unpdf:
+ * - Pure JavaScript, works in both Node.js and browser
+ * - No external dependencies on poppler/ghostscript
+ * - Reliable text extraction with page-level granularity
+ * - Good handling of Indonesian characters (UTF-8 support)
+ *
+ * WHY vs pdf-parse:
+ * - unpdf has better TypeScript support
+ * - Better handling of complex PDF layouts (academic papers)
+ * - More reliable metadata extraction
+ *
+ * Limitations:
+ * - Image extraction not implemented (text-only focus)
+ * - Complex tables may lose structure (becomes linear text)
+ * - Scanned PDFs require OCR (not supported, use preprocessing)
+ *
+ * Key Features:
+ * - Page-level text extraction (tracks page breaks)
+ * - Heading detection using heuristics (all-caps, title-case)
+ * - Metadata extraction (title, author, page count)
+ * - Accurate word counting
+ */
+
 import { extractText, getDocumentProxy, getMeta } from "unpdf";
 import type { ExtractionResult } from "./types";
 
@@ -8,7 +34,29 @@ const TITLE_CASE_PATTERN = /^[A-Z][a-z]*(\s+[A-Z][a-z]*)*$/;
 
 /**
  * Extract text and metadata from PDF files using unpdf
- * @throws Error if PDF parsing fails
+ *
+ * WHY Page-Level Extraction:
+ * - Enables accurate page number attribution for citations
+ * - Supports chunk-level metadata (which page does this chunk come from?)
+ * - Helps with academic papers ("See page 5", "As shown on page 23")
+ *
+ * WHY Heading Detection Heuristics:
+ * - PDFs don't have semantic markup (unlike DOCX)
+ * - All-caps text is often a heading in academic papers
+ * - Title-case short lines are likely section headings
+ * - Imperfect but useful for structure detection
+ *
+ * Process:
+ * 1. Load PDF document proxy
+ * 2. Extract text from each page separately
+ * 3. Track page breaks for chunking
+ * 4. Detect headings using text analysis
+ * 5. Extract metadata (page count, file size)
+ *
+ * @param buffer - PDF file as ArrayBuffer
+ * @param fileName - Original filename for error messages
+ * @returns ExtractionResult with text, page breaks, headings, and metadata
+ * @throws Error if PDF parsing fails or no text content found
  */
 export async function extractPdf(buffer: ArrayBuffer, fileName: string): Promise<ExtractionResult> {
     try {

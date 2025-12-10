@@ -1,3 +1,29 @@
+/**
+ * @fileoverview DOCX Document Extraction Handler
+ *
+ * WHY mammoth:
+ * - Best DOCX parser for text extraction (better than docx npm package)
+ * - Handles complex formatting (headings, lists, tables)
+ * - Good preservation of semantic structure
+ * - Reliable handling of Indonesian characters
+ *
+ * WHY vs docxtemplater/docx:
+ * - mammoth focuses on extraction (not generation)
+ * - Better text quality (respects paragraph breaks)
+ * - Simpler API for read-only use case
+ *
+ * Limitations:
+ * - Tables are converted to linear text (structure lost)
+ * - Images are ignored (text-only focus)
+ * - Comments/track changes not extracted
+ *
+ * Key Features:
+ * - Heading detection (numbered sections like \"1.1 Introduction\")
+ * - Warning reporting for unsupported features
+ * - Preserves paragraph structure
+ * - Accurate word counting
+ */
+
 import mammoth from "mammoth";
 import type { ExtractionResult } from "./types";
 
@@ -8,7 +34,28 @@ const NUMBERING_PATTERN = /^(\d+\.)+/;
 
 /**
  * Extract text and metadata from DOCX files using mammoth
- * @throws Error if DOCX parsing fails
+ *
+ * WHY Numbered Heading Detection:
+ * - Indonesian academic documents use numbered sections ("1.1 Pendahuluan")
+ * - Numbering depth indicates heading level (1.1.1 is deeper than 1.1)
+ * - Enables hierarchical chunking strategies
+ *
+ * WHY extractRawText vs convertToHtml:
+ * - Raw text is cleaner for RAG (no HTML parsing needed)
+ * - Preserves paragraph structure without markup noise
+ * - Faster extraction (no HTML generation overhead)
+ *
+ * Process:
+ * 1. Convert ArrayBuffer to Node.js Buffer (mammoth requirement)
+ * 2. Extract raw text with mammoth
+ * 3. Detect numbered headings (1. Introduction, 1.1 Background)
+ * 4. Determine heading levels from numbering depth
+ * 5. Report warnings for unsupported features
+ *
+ * @param buffer - DOCX file as ArrayBuffer
+ * @param fileName - Original filename for error messages
+ * @returns ExtractionResult with text, headings, warnings, and metadata
+ * @throws Error if DOCX parsing fails or no text content found
  */
 export async function extractDocx(buffer: ArrayBuffer, fileName: string): Promise<ExtractionResult> {
     try {

@@ -1,3 +1,29 @@
+/**
+ * @fileoverview Agentic RAG (Retrieval-Augmented Generation) Pipeline
+ *
+ * WHY Agentic Mode:
+ * - Multi-step reasoning: Breaks down complex academic queries into manageable sub-questions
+ * - Tool-based retrieval: Uses specialized tools (search, query expansion, decomposition, verification)
+ * - Self-correcting: Can refine searches and verify claims against sources
+ * - Better for complex queries: Research questions, multi-part questions, fact-checking scenarios
+ *
+ * WHY vs Standard RAG:
+ * - Standard RAG: Single retrieval → generation (fast, good for simple queries)
+ * - Agentic RAG: Planning → Multi-step retrieval → Tool execution → Synthesis (thorough, better accuracy)
+ *
+ * Research Context:
+ * This implementation is designed for Indonesian academic content (skripsi, tesis, lecture notes).
+ * The agentic approach significantly improves answer quality for multi-hop questions common in
+ * academic research while maintaining citation accuracy and reducing hallucinations.
+ *
+ * Key Features:
+ * - Parallel tool execution for efficiency (avoid sequential bottleneck)
+ * - Citation management with unique numbering
+ * - Guardrail integration for safety and quality
+ * - Streaming support for real-time responses
+ * - Language enforcement (always Indonesian)
+ */
+
 import { generateText, NoSuchToolError, stepCountIs, streamText, tool } from "ai";
 import { z } from "zod";
 import { CHAT_MODEL, telemetryConfig } from "@/lib/ai";
@@ -8,6 +34,19 @@ import { detectQueryLanguage, expandQueryIndonesian, expandQueryWithSynonyms } f
 
 // ==================== Types ====================
 
+/**
+ * Represents a single step in the agentic workflow
+ *
+ * @property stepIndex - Sequential index of this step in the workflow
+ * @property stepType - Type of operation performed (reasoning, tool_call, retrieval, synthesis, reranking)
+ * @property toolName - Name of the tool called (if stepType is tool_call)
+ * @property toolInput - Input parameters passed to the tool
+ * @property toolOutput - Result returned by the tool
+ * @property reasoning - Text explanation of reasoning (for synthesis/reasoning steps)
+ * @property durationMs - Time taken for this step in milliseconds
+ * @property timestamp - Unix timestamp when step started
+ * @property tokenUsage - LLM token consumption for this step
+ */
 export interface AgentStep {
     stepIndex: number;
     stepType: "reasoning" | "tool_call" | "retrieval" | "synthesis" | "reranking";
@@ -24,6 +63,18 @@ export interface AgentStep {
     };
 }
 
+/**
+ * Result of the agentic RAG pipeline execution
+ *
+ * @property answer - Final generated answer in Indonesian
+ * @property steps - Array of all agent steps taken during execution
+ * @property retrievedChunks - All document chunks retrieved across all searches
+ * @property citations - Unique citations with assigned numbers for source attribution
+ * @property guardrailResults - Safety and quality validation results
+ * @property language - Always "id" (Indonesian) for this system
+ * @property totalLatencyMs - Total time taken for the entire pipeline
+ * @property reasoning - Optional array of reasoning steps from the LLM
+ */
 export interface AgenticRagResult {
     answer: string;
     steps: AgentStep[];

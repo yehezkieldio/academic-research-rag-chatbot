@@ -1,3 +1,31 @@
+/**
+ * @fileoverview RAGAS Metrics and Ablation Studies for RAG Evaluation
+ *
+ * WHY RAGAS Metrics:
+ * - Standard RAG evaluation framework from "RAGAS: Automated Evaluation of RAG" (Shahul et al., 2023)
+ * - LLM-based metrics eliminate need for manual labeling
+ * - Comprehensive coverage: faithfulness, relevancy, precision, recall
+ * - Research-backed correlation with human judgments (0.8-0.9 Pearson correlation)
+ *
+ * WHY Ablation Studies:
+ * - Identify which components contribute to performance (vector vs BM25 vs reranking)
+ * - Quantify impact of design decisions (chunking strategy, reranker choice)
+ * - Enable evidence-based optimization (not just intuition)
+ * - Required for academic publication of research findings
+ *
+ * Key Metrics Implemented:
+ * 1. Core RAGAS: faithfulness, answer relevancy, context precision/recall, correctness
+ * 2. Domain-Specific: academic rigor, citation accuracy, terminology correctness
+ * 3. Hallucination: hallucination rate, factual consistency, source attribution, contradiction score
+ * 4. Retrieval Quality: NDCG, MRR, Precision@K
+ * 5. Efficiency: latency breakdown, token usage, throughput
+ *
+ * Research Foundation:
+ * - RAGAS: "Automated Evaluation of Retrieval-Augmented Generation" (Shahul et al., 2023)
+ * - NDCG: "Cumulated Gain-Based Evaluation of IR Techniques" (Järvelin & Kekäläinen, 2002)
+ * - Faithfulness: NLI-based approach from "TRUE: Re-evaluating Factual Consistency" (Honovich et al., 2022)
+ */
+
 import { cosineSimilarity, generateText } from "ai";
 import { CHAT_MODEL, telemetryConfig } from "@/lib/ai";
 import { generateEmbedding } from "@/lib/ai/embeddings";
@@ -6,6 +34,50 @@ import { buildRagPrompt, retrieveContext, SYSTEM_PROMPTS } from "./context-build
 import { hybridRetrieve } from "./hybrid-retrieval";
 import type { RerankerStrategy } from "./reranker";
 
+/**
+ * Comprehensive evaluation metrics for RAG systems
+ *
+ * WHY So Many Metrics:
+ * - No single metric captures all aspects of RAG quality
+ * - Different stakeholders care about different metrics (researchers vs users vs operators)
+ * - Tradeoffs exist (latency vs quality, recall vs precision)
+ * - Academic research requires rigorous multi-faceted evaluation
+ *
+ * Metric Categories:
+ * 1. **Core RAGAS** (standard RAG evaluation)
+ * 2. **Domain-Specific** (Indonesian academic context)
+ * 3. **Hallucination Detection** (critical for academic trust)
+ * 4. **Retrieval Quality** (how good is document selection?)
+ * 5. **Efficiency** (latency, throughput, cost)
+ *
+ * @property faithfulness - Are claims grounded in retrieved sources? (0-1)
+ * @property answerRelevancy - Does answer match query intent? (0-1)
+ * @property contextPrecision - Are retrieved chunks relevant to query? (0-1)
+ * @property contextRecall - Are all relevant facts retrieved? (0-1)
+ * @property answerCorrectness - Semantic + factual similarity to ground truth (0-1)
+ * @property academicRigor - Quality of academic language and argumentation (0-1)
+ * @property citationAccuracy - Are citations correct and verifiable? (0-1)
+ * @property terminologyCorrectness - Proper use of technical terms? (0-1)
+ * @property hallucinationRate - Proportion of fabricated information (0-1, lower is better)
+ * @property factualConsistency - NLI-based consistency with sources (0-1)
+ * @property sourceAttribution - Are claims properly attributed? (0-1)
+ * @property contradictionScore - Presence of logical contradictions (0-1, higher is better)
+ * @property retrievalNdcg - NDCG@K for retrieval quality (0-1)
+ * @property retrievalMrr - Mean Reciprocal Rank (0-1)
+ * @property retrievalPrecision - Precision@K for retrieval (0-1)
+ * @property totalLatencyMs - End-to-end latency (milliseconds)
+ * @property retrievalLatencyMs - Time for retrieval phase (milliseconds)
+ * @property rerankingLatencyMs - Time for reranking phase (milliseconds)
+ * @property generationLatencyMs - Time for LLM generation (milliseconds)
+ * @property agentReasoningLatencyMs - Time for agentic planning/reasoning (milliseconds)
+ * @property tokenEfficiency - Output tokens / input tokens ratio
+ * @property tokensPerSecond - Throughput metric
+ * @property toolCallLatencyMs - Time spent in tool executions (agentic mode)
+ * @property planningLatencyMs - Time spent in query planning (agentic mode)
+ * @property synthesisLatencyMs - Time spent synthesizing final answer (agentic mode)
+ * @property totalAgentSteps - Number of steps in agentic workflow
+ * @property avgStepLatencyMs - Average latency per agentic step
+ */
 export interface EvaluationMetrics {
     // Core RAGAS metrics
     faithfulness: number;

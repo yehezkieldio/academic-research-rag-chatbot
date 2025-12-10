@@ -1,7 +1,44 @@
+/**
+ * @fileoverview Evaluation State Management - Zustand Store
+ *
+ * WHY Zustand for Evaluation:
+ * - Manages evaluation runs and ablation studies
+ * - Persists results across browser sessions
+ * - Tracks long-running evaluation progress
+ * - Stores statistical analysis results
+ *
+ * State Structure:
+ * - evaluations: Array of evaluation runs with configuration
+ * - activeEvaluationId: Currently selected evaluation
+ * - isRunning: Evaluation in progress indicator
+ * - progress: Completion percentage (0-100)
+ * - ablationConfigs: Predefined ablation study configurations
+ * - ablationResults: Metrics per configuration
+ * - statisticalResults: T-tests, ANOVA, confidence intervals
+ */
+
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 
+/**
+ * Comprehensive evaluation metrics
+ *
+ * @property faithfulness - How well response is grounded in retrieved context (0-1)
+ * @property answerRelevancy - How relevant answer is to query (0-1)
+ * @property contextPrecision - Precision of retrieved chunks (0-1)
+ * @property contextRecall - Recall of relevant chunks (0-1)
+ * @property answerCorrectness - Semantic similarity to ground truth (0-1)
+ * @property totalLatencyMs - Total response time
+ * @property retrievalLatencyMs - Document retrieval time
+ * @property generationLatencyMs - LLM generation time
+ * @property hallucinationRate - Proportion of hallucinated content (0-1, lower is better)
+ * @property factualConsistency - Consistency with source documents (0-1)
+ * @property sourceAttribution - Quality of citation/attribution (0-1)
+ * @property academicRigor - Academic writing quality (0-1)
+ * @property citationAccuracy - Citation formatting accuracy (0-1)
+ * @property terminologyCorrectness - Domain terminology usage (0-1)
+ */
 export interface EvaluationMetrics {
     faithfulness: number;
     answerRelevancy: number;
@@ -22,6 +59,19 @@ export interface EvaluationMetrics {
     terminologyCorrectness: number;
 }
 
+/**
+ * Evaluation run metadata
+ *
+ * @property id - Unique run identifier
+ * @property name - User-facing run name
+ * @property description - Run purpose and notes
+ * @property createdAt - Run creation timestamp
+ * @property status - Execution status
+ * @property config - RAG configuration tested
+ * @property metrics - Aggregated metrics (if completed)
+ * @property questionCount - Total questions in run
+ * @property completedQuestions - Questions processed so far
+ */
 export interface EvaluationRun {
     id: string;
     name: string;
@@ -40,6 +90,20 @@ export interface EvaluationRun {
     completedQuestions: number;
 }
 
+/**
+ * Ablation study configuration
+ *
+ * WHY Predefined Configs:
+ * - Ensures systematic comparison across key architectural decisions
+ * - Tests impact of each component (RAG, reranking, hybrid retrieval, agentic mode)
+ * - Provides baseline (no RAG) for comparison
+ *
+ * @property id - Unique config identifier
+ * @property name - English name
+ * @property nameId - Indonesian name (for bilingual UI)
+ * @property description - Config explanation
+ * @property config - RAG parameters to test
+ */
 export interface AblationConfig {
     id: string;
     name: string;

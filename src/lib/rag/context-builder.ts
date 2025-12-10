@@ -1,7 +1,55 @@
+/**
+ * @fileoverview Context Builder for RAG Prompt Engineering
+ *
+ * WHY This Module:
+ * - Bridges retrieval and generation stages
+ * - Accurate token counting prevents context overflow
+ * - Domain-specific prompt engineering (Indonesian academic)
+ * - Structured context formatting for better LLM comprehension
+ *
+ * WHY Prompt Engineering Matters:
+ * - Research shows prompt quality impacts answer accuracy by 20-40%
+ * - System prompts guide LLM behavior (citation style, depth, language)
+ * - Context formatting affects how well LLM uses retrieved information
+ * - Indonesian academic context requires specific instructions
+ *
+ * Key Features:
+ * - Accurate token counting with gpt-tokenizer (not naive whitespace split)
+ * - Token budget management (prevents context overflow)
+ * - Domain-aware prompt enhancement (university metadata integration)
+ * - Multiple system prompts (RAG, Agentic, Non-RAG)
+ * - Sentence window context expansion
+ * - Source attribution formatting
+ *
+ * Research Foundation:
+ * - "Large Language Models are Zero-Shot Reasoners" (Kojima et al., 2022) - prompt engineering impact
+ * - "Chain-of-Thought Prompting Elicits Reasoning" (Wei et al., 2022) - structured prompts
+ */
+
 import { encode } from "gpt-tokenizer";
 import { hybridRetrieve } from "./hybrid-retrieval";
 import { enhancePromptForUniversity, type UniversityMetadata } from "./university-domain";
 
+/**
+ * Retrieved chunk with similarity scores
+ *
+ * WHY This Structure:
+ * - Preserves all score types for analysis (vector, BM25, fused)
+ * - Retrieval method tracking for ablation studies
+ * - Metadata enables context expansion (sentence window, hierarchical)
+ * - Document title for citation formatting
+ *
+ * @property chunkId - Unique identifier for the chunk
+ * @property documentId - Source document ID
+ * @property documentTitle - Title for citations
+ * @property content - The actual retrieved text
+ * @property similarity - Combined similarity score (0-1)
+ * @property vectorScore - Cosine similarity from vector search
+ * @property bm25Score - BM25 keyword matching score
+ * @property fusedScore - RRF-fused score
+ * @property retrievalMethod - Strategy used: "vector", "keyword", or "hybrid"
+ * @property metadata - Optional chunk metadata (page, section, headings, window context)
+ */
 export interface RetrievedChunk {
     chunkId: string;
     documentId: string;

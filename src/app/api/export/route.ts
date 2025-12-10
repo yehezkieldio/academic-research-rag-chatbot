@@ -1,3 +1,32 @@
+/**
+ * @fileoverview API Route: Data Export
+ *
+ * WHY This Endpoint Exists:
+ * - Exports evaluation data for statistical analysis in R, Python, SPSS
+ * - Generates analysis scripts with proper variable labels and test code
+ * - Supports academic research and publication requirements
+ * - Enables reproducible analysis with standardized data formats
+ *
+ * Request/Response Flow:
+ * 1. Parse query parameters (runId/ablationId, format, options)
+ * 2. Fetch evaluation data from database
+ * 3. Format data according to requested format (CSV, JSON, SPSS, Python, R)
+ * 4. Generate analysis scripts with bilingual labels (English/Indonesian)
+ * 5. Return formatted data or script as downloadable file
+ *
+ * WHY Multiple Formats:
+ * - CSV: Universal compatibility, Excel, R, Python pandas
+ * - JSON: Programmatic access, web applications
+ * - SPSS: Social science research standard
+ * - Python: Includes complete analysis script with statistical tests
+ * - R: Includes ggplot2 visualizations and statistical tests
+ *
+ * Integration Points:
+ * - Frontend: DataExportPanel component triggers downloads
+ * - Statistical Analysis: R/Python scripts include t-tests, ANOVA, effect sizes
+ * - Academic Publishing: SPSS format for traditional social science workflows
+ */
+
 import { eq } from "drizzle-orm";
 import { type NextRequest, NextResponse } from "next/server";
 import { db } from "@/lib/db";
@@ -12,6 +41,63 @@ import {
     generateSPSSSyntax,
 } from "@/lib/export/data-exporter";
 
+/**
+ * GET /api/export
+ *
+ * WHY Query Parameters Instead of POST:
+ * - GET allows direct browser download with URL
+ * - Simpler integration with download buttons
+ * - Cacheable (though typically not cached due to dynamic data)
+ *
+ * Query Parameters:
+ * - runId?: string - Evaluation run ID to export
+ * - ablationId?: string - Ablation study ID to export
+ * - format: \"csv\" | \"json\" | \"spss\" | \"python\" | \"r\" (default: \"csv\")
+ * - language: \"en\" | \"id\" (default: \"id\") - Variable labels language
+ * - includeMetadata: boolean (default: true) - Include variable descriptions
+ * - decimalPlaces: number (default: 4) - Numeric precision
+ *
+ * Response:
+ * - Success (200): File download with appropriate Content-Type and Content-Disposition headers
+ *   - CSV: text/csv
+ *   - JSON: application/json
+ *   - SPSS: text/plain (.sps syntax file)
+ *   - Python: text/x-python
+ *   - R: text/x-r
+ * - Error (400): { error: string } - Missing required parameters
+ * - Error (404): { error: string } - Run/study not found
+ * - Error (500): { error: string } - Export generation failure
+ *
+ * Exported Data Schema:
+ * - Question-level: All RAGAS metrics, latency breakdown, retrieved chunks
+ * - Ablation-level: Configuration details, aggregated metrics per config
+ *
+ * Python Script Features:
+ * - Paired t-tests (RAG vs Non-RAG)
+ * - ANOVA for multi-group comparison
+ * - Effect size calculations (Cohen's d, eta-squared)
+ * - Bootstrap confidence intervals
+ * - Correlation matrices
+ * - Visualization with matplotlib/seaborn
+ *
+ * R Script Features:
+ * - ggplot2 visualizations
+ * - Paired t-tests with effect sizes
+ * - Tukey HSD post-hoc tests
+ * - Confidence intervals
+ *
+ * @param request - Next.js request with query parameters
+ * @returns File download response or JSON error
+ *
+ * @example
+ * ```typescript
+ * // Download CSV for evaluation run
+ * window.location.href = `/api/export?runId=${runId}&format=csv&language=id`;
+ *
+ * // Download Python analysis script
+ * window.location.href = `/api/export?format=python&language=id`;
+ * ```
+ */
 export async function GET(request: NextRequest) {
     const searchParams = request.nextUrl.searchParams;
     const runId = searchParams.get("runId");

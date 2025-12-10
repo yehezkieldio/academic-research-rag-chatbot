@@ -1,9 +1,39 @@
+/**
+ * @fileoverview API Route: Ablation Studies
+ *
+ * WHY This Endpoint Exists:
+ * - Systematic comparison of different RAG configurations
+ * - Identifies which components contribute most to performance
+ * - Supports academic research on RAG architecture decisions
+ * - Enables data-driven optimization of retrieval strategies
+ *
+ * Request/Response Flow:
+ * - GET: Retrieve recent ablation studies
+ * - POST: Execute ablation study across multiple configurations
+ *
+ * WHY Ablation Studies Matter:
+ * - Shows which components (reranking, hybrid retrieval, agentic mode) provide value
+ * - Helps justify architectural complexity with empirical data
+ * - Guides resource allocation (compute vs accuracy tradeoffs)
+ */
+
 import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { ablationStudies, evaluationQuestions as evaluationQuestionsTable } from "@/lib/db/schema";
 import { ACADEMIC_QUESTIONS } from "@/lib/evaluation-questions";
 import { ABLATION_CONFIGS, type AblationConfig, generateAblationReport, runAblationStudy } from "@/lib/rag/evaluation";
 
+/**
+ * GET /api/evaluation/ablation
+ *
+ * WHY: Lists recent ablation studies for comparison
+ *
+ * Response:
+ * - Success (200): { studies: AblationStudy[] } - Last 10 studies
+ * - Error (500): { error: string }
+ *
+ * @returns JSON response with ablation studies array
+ */
 export async function GET() {
     try {
         const studies = await db.select().from(ablationStudies).orderBy(desc(ablationStudies.createdAt)).limit(10);
@@ -15,6 +45,37 @@ export async function GET() {
     }
 }
 
+/**
+ * POST /api/evaluation/ablation
+ *
+ * WHY Complex Execution:
+ * - Tests multiple configurations (baseline, vector-only, BM25, hybrid, agentic)
+ * - Each config tested against all questions (20-50 questions × 5-10 configs)
+ * - Calculates full RAGAS metrics for each config-question pair
+ * - Can take 30-60 minutes for comprehensive ablation study
+ *
+ * Request Body:
+ * - questions?: Array<{ question, groundTruth }> - Custom questions or uses defaults
+ * - configs?: AblationConfig[] - Custom configs or uses predefined set
+ * - name?: string - Study name
+ * - description?: string - Study purpose and notes
+ *
+ * Response:
+ * - Success (200): {
+ *     study: AblationStudy with results and comprehensive report
+ *   }
+ * - Error (500): { error: string }
+ *
+ * Tested Configurations:
+ * 1. Baseline (no RAG) - Direct LLM
+ * 2. Vector-only - Pure semantic similarity
+ * 3. BM25-only - Pure keyword matching
+ * 4. Hybrid (RRF) - Combined vector + BM25
+ * 5. Agentic RAG - Multi-step reasoning with tools
+ *
+ * @param request - Next.js request with JSON body
+ * @returns JSON response with completed ablation study and analysis report
+ */
 export async function POST(request: Request) {
     try {
         const body = await request.json().catch(() => ({}));

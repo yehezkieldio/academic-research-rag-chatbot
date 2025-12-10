@@ -1,7 +1,54 @@
+/**
+ * @fileoverview API Route: Evaluation Results
+ *
+ * WHY This Endpoint Exists:
+ * - Aggregates evaluation metrics for dashboard visualization
+ * - Calculates average scores across all questions in a run
+ * - Computes improvement percentages (RAG vs non-RAG)
+ * - Provides detailed per-question results for analysis
+ *
+ * Request/Response Flow:
+ * 1. Fetch evaluation run metadata
+ * 2. Retrieve all questions with calculated metrics
+ * 3. Calculate aggregate statistics (mean, confidence intervals)
+ * 4. Compute improvement percentages
+ * 5. Return comprehensive results with summaries
+ */
+
 import { eq } from "drizzle-orm";
 import { db } from "@/lib/db";
 import { evaluationQuestions, evaluationRuns } from "@/lib/db/schema";
 
+/**
+ * GET /api/evaluation/[id]/results
+ *
+ * WHY Aggregate Metrics:
+ * - Individual question scores are noisy - aggregation shows true performance
+ * - Improvement percentages quantify RAG system value
+ * - Legacy field names ensure backward compatibility with dashboard components
+ *
+ * Path Parameters:
+ * - id: string - Evaluation run ID
+ *
+ * Response:
+ * - Success (200): {
+ *     run: EvaluationRun,
+ *     questions: EvaluationQuestion[],
+ *     aggregateMetrics: {
+ *       rag: { faithfulness, answerRelevancy, contextPrecision, contextRecall, answerCorrectness },
+ *       nonRag: { answerRelevancy, answerCorrectness },
+ *       avgHallucinationRate, avgFactualConsistency, avgLatencyMs, etc.
+ *     },
+ *     improvements: { answerRelevancy, answerCorrectness, hallucinationReduction },
+ *     summary: { totalQuestions, completedQuestions, ragBetterThanNonRag }
+ *   }
+ * - Error (404): { error: string } - Evaluation run not found
+ * - Error (500): { error: string } - Database query failure
+ *
+ * @param _request - Next.js request object (unused)
+ * @param params - Route parameters with evaluation run ID
+ * @returns JSON response with aggregated metrics and detailed results
+ */
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;

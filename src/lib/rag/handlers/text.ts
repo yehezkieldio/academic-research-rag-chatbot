@@ -1,3 +1,23 @@
+/**
+ * @fileoverview Plain Text and Markdown Extraction Handlers
+ *
+ * WHY Separate Text Handlers:
+ * - Plain text: Simplest case, direct UTF-8 decoding
+ * - Markdown: Adds heading extraction from # syntax
+ * - Both are common formats for academic notes and documentation
+ *
+ * WHY Encoding Detection:
+ * - Files may have BOM (Byte Order Mark) indicating encoding
+ * - UTF-8 is default but UTF-16 is common on Windows
+ * - Correct encoding prevents character corruption (especially Indonesian)
+ *
+ * Key Features:
+ * - BOM detection for UTF-8, UTF-16LE, UTF-16BE
+ * - Markdown heading extraction (# through ######)
+ * - Word counting for statistics
+ * - Fallback to UTF-8 if encoding unclear
+ */
+
 import type { ExtractionResult } from "./types";
 
 // Regex patterns (defined at module level for performance)
@@ -5,7 +25,20 @@ const WORD_SPLIT_PATTERN = /\s+/;
 const MARKDOWN_HEADING_PATTERN = /^(#{1,6})\s+(.+)$/gm;
 
 /**
- * Detect text encoding from buffer
+ * Detect text encoding from buffer using BOM (Byte Order Mark)
+ *
+ * WHY BOM Detection:
+ * - Windows often saves files with BOM
+ * - UTF-16 requires correct endianness (LE vs BE)
+ * - Wrong encoding causes character corruption (é becomes Ã©)
+ *
+ * Supported Encodings:
+ * - UTF-8 (EF BB BF)
+ * - UTF-16 Little Endian (FF FE)
+ * - UTF-16 Big Endian (FE FF)
+ *
+ * @param buffer - File buffer to analyze
+ * @returns Encoding name ("utf-8", "utf-16le", "utf-16be")
  */
 function detectEncoding(buffer: ArrayBuffer): string {
     const bytes = new Uint8Array(buffer);

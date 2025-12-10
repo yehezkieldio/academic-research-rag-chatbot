@@ -1,3 +1,35 @@
+/**
+ * @fileoverview Document Processing Pipeline for Academic Content
+ *
+ * WHY This Pipeline:
+ * - Unified interface for multiple file formats (PDF, DOCX, TXT, MD)
+ * - Atomic processing with database transactions (prevents partial failures)
+ * - Language detection for Indonesian-specific processing
+ * - University metadata extraction (course codes, document types)
+ * - Comprehensive error handling and logging
+ *
+ * Pipeline Stages:
+ * 1. **Extraction**: Convert file to text (format-specific handlers)
+ * 2. **Language Detection**: Identify Indonesian vs English content
+ * 3. **Chunking**: Split into optimal-sized pieces
+ * 4. **Embedding**: Generate vector representations
+ * 5. **Metadata Extraction**: Extract keywords, structure, domain info
+ * 6. **Storage**: Atomic insert with transaction rollback on failure
+ *
+ * WHY Transactions:
+ * - Prevents "ghost chunks" from failed processing
+ * - Ensures status consistency (processing → completed/failed)
+ * - Safe for retry after failure
+ * - All-or-nothing semantics
+ *
+ * Key Features:
+ * - Format-agnostic extraction (PDF, DOCX, TXT, MD)
+ * - Batch embedding generation (avoids N+1 queries)
+ * - Comprehensive logging for debugging
+ * - Academic metadata extraction (course codes, document types)
+ * - Language-aware processing (Indonesian stemming, separators)
+ */
+
 import { eq } from "drizzle-orm";
 import { generateEmbeddings } from "@/lib/ai/embeddings";
 import { db } from "@/lib/db";
@@ -11,6 +43,23 @@ import { extractKeywords } from "./hybrid-retrieval";
 import { extractUniversityMetadata } from "./university-domain";
 import { detectDocumentLanguage } from "./utils/language";
 
+/**
+ * Result of document processing operation
+ *
+ * WHY This Structure:
+ * - success: Quick boolean for error handling
+ * - chunksCreated: Metric for monitoring and debugging
+ * - chunkingStrategy: Enables ablation analysis
+ * - language: Important for retrieval and reranking
+ * - error: Detailed message for troubleshooting
+ *
+ * @property success - Whether processing completed successfully
+ * @property documentId - ID of the processed document
+ * @property chunksCreated - Number of chunks generated
+ * @property chunkingStrategy - Strategy used for chunking
+ * @property language - Detected language ("en" or "id")
+ * @property error - Error message if processing failed
+ */
 export interface ProcessingResult {
     success: boolean;
     documentId: string;

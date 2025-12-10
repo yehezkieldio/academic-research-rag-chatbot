@@ -1,3 +1,29 @@
+/**
+ * @fileoverview API Route: Chat Endpoint
+ *
+ * WHY This Endpoint Exists:
+ * - Serves as the main interface between frontend chat UI and RAG pipeline
+ * - Provides flexible chat modes: direct LLM, standard RAG, and agentic RAG
+ * - Implements streaming responses for real-time user feedback
+ * - Integrates guardrails for content safety and quality control
+ *
+ * Request/Response Flow:
+ * 1. Parse incoming message and configuration (RAG mode, retrieval strategy, etc.)
+ * 2. Detect query language (Indonesian/English) for domain-specific processing
+ * 3. Apply input guardrails (validation, negative reaction detection)
+ * 4. Route to appropriate processing mode (agentic/standard RAG/direct)
+ * 5. Stream response chunks with metadata (retrieved chunks, agent steps, citations)
+ * 6. Apply output guardrails (hallucination detection, factual consistency)
+ * 7. Persist conversation to database for history and analysis
+ *
+ * Integration Points:
+ * - Frontend: ChatInterface component consumes streaming responses
+ * - RAG Pipeline: Hybrid retrieval, reranking, context building
+ * - Guardrails: Input validation, output validation, negative reaction handling
+ * - Database: Session and message persistence for continuity
+ * - Telemetry: Performance monitoring and debugging
+ */
+
 import { convertToModelMessages, streamText, type UIMessage } from "ai";
 import { eq } from "drizzle-orm";
 import { CHAT_MODEL, telemetryConfig } from "@/lib/ai";
@@ -9,8 +35,22 @@ import { detectNegativeReaction, validateInput, validateOutput } from "@/lib/rag
 import type { RetrievalResult } from "@/lib/rag/hybrid-retrieval";
 import { detectQueryLanguage } from "@/lib/rag/university-domain";
 
+/**
+ * Maximum execution duration for serverless function (in seconds)
+ * WHY 60 seconds: Allows sufficient time for complex agentic RAG workflows with multiple retrieval and reasoning steps
+ */
 export const maxDuration = 60;
 
+/**
+ * Metadata for agentic RAG responses
+ *
+ * @property type - Response type identifier
+ * @property retrievedChunks - Document chunks retrieved and used for generation
+ * @property steps - Agent reasoning and tool execution steps
+ * @property language - Detected query language
+ * @property latencyMs - Total response generation time
+ * @property citations - Formatted citations for academic context
+ */
 interface AgenticMetadata {
     type: "agentic";
     retrievedChunks: Array<{
@@ -28,6 +68,14 @@ interface AgenticMetadata {
     citations: Array<{ id: string; documentTitle: string; citationNumber: number }>;
 }
 
+/**
+ * Metadata for standard RAG responses
+ *
+ * @property type - Response type identifier
+ * @property retrievedChunks - Document chunks retrieved for context
+ * @property language - Detected query language
+ * @property latencyMs - Total response generation time
+ */
 interface StandardRagMetadata {
     type: "standard-rag";
     retrievedChunks: Array<{
@@ -43,14 +91,67 @@ interface StandardRagMetadata {
     latencyMs?: number;
 }
 
+/**
+ * Metadata for direct LLM responses (no RAG)
+ *
+ * @property type - Response type identifier
+ * @property language - Detected query language
+ * @property latencyMs - Total response generation time
+ */
 interface DirectMetadata {
     type: "direct";
     language: "en" | "id";
     latencyMs?: number;
 }
 
+/**
+ * Union type for all possible chat response metadata
+ */
 type ChatMetadata = AgenticMetadata | StandardRagMetadata | DirectMetadata;
 
+/**
+ * POST /api/chat
+ *
+ * WHY Streaming Response:
+ * - Provides real-time feedback during long RAG pipeline execution (retrieval → reranking → generation)
+ * - Reduces perceived latency - users see progressive output instead of waiting 5-10 seconds
+ * - Allows progressive rendering of agent steps and citations in UI
+ * - Better UX for complex queries requiring multi-step reasoning
+ *
+ * Request Body:
+ * - messages: UIMessage[] - Conversation history in Vercel AI SDK format
+ * - sessionId?: string - Session identifier for conversation persistence
+ * - useRag: boolean - Enable RAG mode (default: true)
+ * - useAgenticMode: boolean - Enable multi-step agentic reasoning (default: true)
+ * - retrievalStrategy: "vector" | "keyword" | "hybrid" - Document retrieval method (default: "hybrid")
+ * - enableGuardrails: boolean - Enable content safety checks (default: true)
+ * - useReranker: boolean - Enable reranking for better relevance (default: true)
+ * - rerankerStrategy: string - Reranking algorithm selection (default: "cross_encoder")
+ *
+ * Response:
+ * - Success (200): Server-Sent Events stream with text chunks and metadata
+ *   - Metadata includes: retrieved chunks, agent steps, citations, latency metrics
+ * - Error (400): { error: string, violations?: string[] } - Input validation failure
+ * - Error (500): { error: string, details: string } - Processing error
+ *
+ * @param request - Next.js request object with JSON body
+ * @returns Streaming response with UI message format and metadata
+ * @throws Error - When message parsing fails or RAG pipeline encounters errors
+ *
+ * @example
+ * ```typescript
+ * // Frontend usage with Vercel AI SDK
+ * const { messages, append } = useChat({
+ *   api: '/api/chat',
+ *   body: {
+ *     sessionId: 'session-123',
+ *     useRag: true,
+ *     useAgenticMode: true,
+ *     retrievalStrategy: 'hybrid'
+ *   }
+ * });
+ * ```
+ */
 export async function POST(request: Request) {
     const startTime = Date.now();
     console.log("[POST] Starting chat request processing");

@@ -1,3 +1,30 @@
+/**
+ * @fileoverview API Route: Run Evaluation
+ *
+ * WHY This Endpoint Exists:\n * - Executes evaluation runs to measure RAG system performance
+ * - Calculates RAGAS metrics (faithfulness, answer relevancy, context precision/recall, correctness)
+ * - Measures hallucination rates and domain-specific academic quality metrics
+ * - Compares RAG vs non-RAG responses to quantify improvement
+ * - Tracks detailed latency metrics for performance optimization
+ *
+ * Request/Response Flow:
+ * 1. Update run status to \"running\"
+ * 2. For each question:
+ *    a. Generate RAG response with context retrieval and reranking
+ *    b. Generate non-RAG response for comparison
+ *    c. Calculate all RAGAS and hallucination metrics
+ *    d. Track latency breakdown (retrieval, reranking, generation)
+ *    e. Update question record with results
+ *    f. Update run progress
+ * 3. Mark run as \"completed\" with final statistics
+ *
+ * WHY This Design:
+ * - Sequential processing ensures consistent resource usage
+ * - Progress tracking allows UI to show real-time status
+ * - Comprehensive metrics enable academic research and ablation studies
+ * - Latency breakdown helps identify performance bottlenecks
+ */
+
 import { generateText } from "ai";
 import { eq } from "drizzle-orm";
 import { CHAT_MODEL, telemetryConfig } from "@/lib/ai";
@@ -12,6 +39,33 @@ import {
     createLatencyTracker,
 } from "@/lib/rag/evaluation";
 
+/**
+ * POST /api/evaluation/[id]/run
+ *
+ * WHY Long-Running Process:
+ * - Each question requires 2 LLM calls (RAG + non-RAG) plus metric calculations
+ * - RAGAS metrics involve additional LLM calls for faithfulness and relevancy scoring
+ * - Can take 5-15 minutes for 20-50 questions depending on model latency
+ *
+ * Path Parameters:
+ * - id: string - Evaluation run ID
+ *
+ * Response:
+ * - Success (200): { success: true, completedQuestions: number }
+ * - Error (500): { error: string } - Execution failure
+ *
+ * Metrics Calculated (per question):
+ * - Core RAGAS: faithfulness, answer relevancy, context precision/recall, answer correctness
+ * - Hallucination: hallucination rate, factual consistency, source attribution, contradiction score
+ * - Domain-specific: academic rigor, citation accuracy, terminology correctness
+ * - Retrieval: NDCG, MRR, precision
+ * - Latency: retrieval, reranking, generation, agent reasoning, tool calls, tokens/sec
+ *
+ * @param _request - Next.js request object (unused)
+ * @param params - Route parameters with evaluation run ID
+ * @returns JSON response with completion status and question count
+ * @throws Error - When evaluation execution fails, updates run status to \"failed\"
+ */
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
     try {
         const { id } = await params;

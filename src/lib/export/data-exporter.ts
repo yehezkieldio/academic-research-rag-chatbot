@@ -1,6 +1,24 @@
 /**
- * Data Export Utility for Statistical Analysis
- * Supports CSV, JSON, SPSS-compatible SAV format, and Python/R ready formats
+ * @fileoverview Data Export Utility for Statistical Analysis
+ *
+ * WHY This Module:
+ * - Bridges gap between RAG evaluation and statistical analysis tools
+ * - Supports multiple research workflows (R, Python, SPSS)
+ * - Generates bilingual variable labels (English/Indonesian)
+ * - Includes ready-to-use analysis scripts
+ *
+ * Supported Formats:
+ * - CSV: Universal compatibility, Excel, pandas, R
+ * - JSON: Programmatic access, web applications, metadata preservation
+ * - SPSS: Social science research standard (generates .sps syntax file)
+ * - Python: Complete analysis script with scipy, pandas, matplotlib
+ * - R: Script with ggplot2 visualizations and statistical tests
+ *
+ * WHY Generate Analysis Scripts:
+ * - Reduces barrier to entry for researchers
+ * - Ensures correct statistical methods (paired t-tests, effect sizes)
+ * - Provides reproducible analysis workflow
+ * - Includes visualizations for publication
  */
 
 export interface ExportOptions {
@@ -139,6 +157,23 @@ const VARIABLE_TYPES: Record<string, "numeric" | "string"> = {
     rerankerStrategy: "string",
 };
 
+/**
+ * Export evaluation data to CSV format
+ *
+ * WHY CSV:
+ * - Universal compatibility with Excel, R, Python pandas, SPSS
+ * - Human-readable for manual inspection
+ * - Small file size for large datasets
+ *
+ * Features:
+ * - Proper escaping for commas and quotes in text fields
+ * - Configurable decimal precision for metrics
+ * - Missing value handling
+ *
+ * @param data - Evaluation data or ablation results
+ * @param options - Export configuration
+ * @returns CSV string with headers
+ */
 export function exportToCSV(
     data: RawEvaluationData[] | AblationRawData[],
     options: Partial<ExportOptions> = {}

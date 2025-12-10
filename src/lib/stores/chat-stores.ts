@@ -1,8 +1,44 @@
+/**
+ * @fileoverview Chat State Management - Zustand Store
+ *
+ * WHY Zustand:
+ * - Simpler API than Redux with less boilerplate
+ * - Better TypeScript support out of the box
+ * - Built-in persistence with localStorage
+ * - Immer integration for immutable updates
+ * - No Provider wrapper needed (vs Context API)
+ * - Better performance than Context for frequent updates
+ *
+ * State Structure:
+ * - sessions: Array of chat sessions with messages and settings
+ * - activeSessionId: Currently selected session
+ * - isLoading: Request in progress indicator
+ * - streamingContent: Accumulator for streaming responses
+ * - settings: Global chat configuration
+ *
+ * WHY This Architecture:
+ * - Supports multiple concurrent conversations
+ * - Persists last 10 sessions to localStorage
+ * - Enables offline access to recent conversations
+ * - Syncs with database on app load
+ */
+
 import { create } from "zustand";
 import { createJSONStorage, persist } from "zustand/middleware";
 import { immer } from "zustand/middleware/immer";
 
-// Types
+/**
+ * Agent step metadata for agentic RAG responses
+ *
+ * @property stepIndex - Sequential step number
+ * @property stepType - Type of operation performed
+ * @property toolName - Name of tool called (if applicable)
+ * @property toolInput - Input parameters to tool
+ * @property toolOutput - Tool execution result
+ * @property reasoning - Agent's reasoning for this step
+ * @property durationMs - Step execution time
+ * @property timestamp - Step completion timestamp
+ */
 export interface AgentStep {
     stepIndex: number;
     stepType: "reasoning" | "tool_call" | "retrieval" | "synthesis";
@@ -14,6 +50,17 @@ export interface AgentStep {
     timestamp: number;
 }
 
+/**
+ * Retrieved document chunk metadata
+ *
+ * @property chunkId - Unique chunk identifier
+ * @property documentTitle - Source document name
+ * @property content - Chunk text content
+ * @property similarity - Relevance score (0-1, higher is better)
+ * @property retrievalMethod - How chunk was retrieved
+ * @property vectorScore - Semantic similarity score (if vector retrieval used)
+ * @property bm25Score - Keyword matching score (if BM25 used)
+ */
 export interface RetrievedChunk {
     chunkId: string;
     documentTitle: string;
@@ -24,6 +71,19 @@ export interface RetrievedChunk {
     bm25Score?: number;
 }
 
+/**
+ * Chat message with RAG metadata
+ *
+ * @property id - Unique message identifier
+ * @property role - Message sender role
+ * @property content - Message text
+ * @property createdAt - Unix timestamp
+ * @property agentSteps - Agentic reasoning steps (if agentic mode)
+ * @property retrievedChunks - RAG context chunks (if RAG enabled)
+ * @property latencyMs - Response generation time
+ * @property tokenCount - Token count for cost tracking
+ * @property language - Detected message language
+ */
 export interface ChatMessage {
     id: string;
     role: "user" | "assistant" | "system";
@@ -36,6 +96,16 @@ export interface ChatMessage {
     language?: "en" | "id";
 }
 
+/**
+ * Chat session container
+ *
+ * @property id - Unique session identifier
+ * @property title - User-facing session name
+ * @property messages - Conversation history
+ * @property createdAt - Session creation timestamp
+ * @property updatedAt - Last message timestamp
+ * @property settings - Session-specific configuration
+ */
 export interface ChatSession {
     id: string;
     title: string;
@@ -45,6 +115,17 @@ export interface ChatSession {
     settings: ChatSettings;
 }
 
+/**
+ * Chat configuration settings
+ *
+ * @property useRag - Enable RAG mode
+ * @property useAgenticMode - Enable multi-step reasoning
+ * @property retrievalStrategy - Document retrieval method
+ * @property enableGuardrails - Enable content safety checks
+ * @property language - Language preference (auto-detect or fixed)
+ * @property maxSteps - Maximum agent reasoning steps
+ * @property temperature - LLM temperature (0-1, lower is more deterministic)
+ */
 export interface ChatSettings {
     useRag: boolean;
     useAgenticMode: boolean;
@@ -55,6 +136,15 @@ export interface ChatSettings {
     temperature: number;
 }
 
+/**
+ * Chat store interface with state and actions
+ *
+ * WHY This Design:
+ * - Separates state from actions for clarity
+ * - Computed values (activeSession) derived from state
+ * - Actions are synchronous - API calls happen in components
+ * - Streaming content separated from message history for performance
+ */
 interface ChatStore {
     // State
     sessions: ChatSession[];
@@ -92,6 +182,18 @@ interface ChatStore {
     appendStreamingContent: (content: string) => void;
 }
 
+/**
+ * Default chat settings
+ *
+ * WHY These Defaults:
+ * - useRag: true - RAG provides better accuracy for academic queries
+ * - useAgenticMode: true - Multi-step reasoning improves complex query handling
+ * - retrievalStrategy: \"hybrid\" - Combines semantic + keyword for best recall
+ * - enableGuardrails: true - Safety-first for production use
+ * - language: \"auto\" - Detect Indonesian vs English automatically
+ * - maxSteps: 5 - Balance between thoroughness and latency
+ * - temperature: 0.4 - Lower for factual accuracy (academic context)
+ */
 const defaultSettings: ChatSettings = {
     useRag: true,
     useAgenticMode: true,

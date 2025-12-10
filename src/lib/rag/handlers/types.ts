@@ -1,5 +1,30 @@
 /**
+ * @fileoverview Type Definitions for Document Extraction
+ *
+ * WHY This Module:
+ * - Unified interface for heterogeneous document formats (PDF, DOCX, TXT, MD)
+ * - Structured metadata enables format-specific optimizations
+ * - Error handling with recoverability information
+ * - Extensible design for future format support
+ *
+ * Key Design Decisions:
+ * - ExtractionResult: Combines text + metadata + optional errors
+ * - ExtractionMetadata: Rich structure information (pages, headings, encoding)
+ * - DocumentStructure: Enables chunk-level attribution (page numbers, sections)
+ * - ExtractionError: Distinguishes recoverable vs fatal errors
+ */
+
+/**
  * Document extraction result with text, metadata, and error information
+ *
+ * WHY This Structure:
+ * - text: Primary extraction output (what we need for RAG)
+ * - metadata: Enables advanced chunking strategies (respect page/section boundaries)
+ * - error: Partial failures are acceptable (extract what we can, warn about rest)
+ *
+ * @property text - Extracted text content (may be empty if extraction failed)
+ * @property metadata - Structural and statistical metadata
+ * @property error - Optional error information for partial failures
  */
 export interface ExtractionResult {
     /** Extracted text content */

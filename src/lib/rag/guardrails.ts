@@ -1,6 +1,53 @@
+/**
+ * @fileoverview Guardrails System for Academic Chatbot Safety and Quality
+ *
+ * WHY Guardrails Are Critical:
+ * - Academic context requires strict adherence to integrity policies
+ * - User data (student IDs, emails) must be protected (PII compliance)
+ * - Prompt injection attacks can bypass safety controls
+ * - Hallucinations undermine trust in academic assistance
+ * - Negative user reactions need empathetic handling
+ *
+ * WHY This Architecture:
+ * - Multi-layer validation (input + output + sentiment) for comprehensive safety
+ * - Pattern-based + LLM-based detection (fast + accurate)
+ * - Severity levels enable proportionate responses
+ * - Actionable violations with remediation suggestions
+ * - Indonesian language support for local context
+ *
+ * Research Context:
+ * This system implements safeguards for educational AI per "Artificial Intelligence and the Future of Teaching and Learning" (US Dept of Education, 2023)
+ *
+ * Key Features:
+ * - PII detection (emails, phone numbers, NIMs, credit cards)
+ * - Prompt injection detection (jailbreak attempts)
+ * - Academic integrity checks (plagiarism requests, cheating)
+ * - Hallucination detection using NLI (Natural Language Inference)
+ * - Citation verification against sources
+ * - Negative sentiment detection (frustration, confusion)
+ * - Rate limiting for abuse prevention
+ */
+
 import { generateText } from "ai";
 import { CHAT_MODEL } from "@/lib/ai";
 
+/**
+ * Result of a guardrail validation check
+ *
+ * WHY This Structure:
+ * - passed: Quick boolean for allow/block decisions
+ * - violations: Detailed list enables multi-issue reporting
+ * - severity: Enables graduated responses (log vs warn vs block)
+ * - suggestedResponse: Provides user-friendly error messages
+ * - requiresEscalation: Flags serious issues for human review
+ *
+ * @property passed - Whether input/output passed all checks
+ * @property violations - Array of detected violations (empty if passed)
+ * @property modifiedContent - Content after PII redaction (if applicable)
+ * @property severity - Highest severity level among violations
+ * @property suggestedResponse - User-friendly message to show
+ * @property requiresEscalation - Whether issue needs human intervention
+ */
 export interface GuardrailResult {
     passed: boolean;
     violations: GuardrailViolation[];
