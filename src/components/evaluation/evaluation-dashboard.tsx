@@ -396,16 +396,18 @@ export function EvaluationDashboard() {
     );
 }
 
+interface AblationResult {
+    configName: string;
+    metrics: Record<string, number>;
+}
+
 interface AblationData {
     studies: Array<{
         id: string;
         name: string;
         status: string;
         configurations: unknown[];
-        results: Array<{
-            configName: string;
-            metrics: Record<string, number>;
-        }>;
+        results: AblationResult[];
     }>;
 }
 
@@ -488,8 +490,8 @@ function AblationStudiesView({ data, onRunStudy }: { data: AblationData | undefi
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {latestStudy.results.map((result: any, idx: number) => (
-                                    <TableRow key={idx}>
+                                {latestStudy.results.map((result: AblationResult) => (
+                                    <TableRow key={result.configName}>
                                         <TableCell className="font-medium">{result.configName}</TableCell>
                                         <TableCell>
                                             <MetricBadge value={result.metrics.faithfulness} />
@@ -724,7 +726,7 @@ function HallucinationMetricsView({ runs }: { runs: EvaluationRun[] }) {
     );
 }
 
-function DomainMetricsView({ runs }: { runs: EvaluationRun[] }) {
+function DomainMetricsView(_props: { runs: EvaluationRun[] }) {
     return (
         <div className="space-y-6">
             <div>
@@ -1368,8 +1370,8 @@ function AblationStudyPanel() {
                                 </TableRow>
                             </TableHeader>
                             <TableBody>
-                                {latestStudy.results.map((result: any, idx: number) => (
-                                    <TableRow key={idx}>
+                                {latestStudy.results.map((result: AblationResult) => (
+                                    <TableRow key={result.configName}>
                                         <TableCell className="font-medium">{result.configName}</TableCell>
                                         <TableCell>
                                             <MetricBadge value={result.metrics.faithfulness} />
