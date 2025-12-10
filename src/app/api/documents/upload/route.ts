@@ -7,6 +7,20 @@
  * - Initiates background processing for chunking and embedding generation
  * - Supports OCR for scanned PDFs using Mistral's vision model
  *
+ * Supported Document Types (12 categories, 77+ types):
+ * 1. Traditional Academic: syllabus, thesis, skripsi, RPS, modul
+ * 2. Informasi Akademik: CPL, kurikulum, kalender, KRS, kelulusan
+ * 3. Dokumen Regulasi: pedoman, peraturan rektor, SK, SOP, tata tertib
+ * 4. Administrasi: UKT, cuti, legalisir, magang, formulir
+ * 5. Informasi Dosen: profil, publikasi, jadwal mengajar
+ * 6. Penelitian: hibah, roadmap, jurnal, prosiding
+ * 7. Kemahasiswaan: beasiswa, lomba, UKM, prestasi
+ * 8. Fasilitas: lab, perpustakaan, denah kampus
+ * 9. PMB: jalur masuk, biaya, kuota, pendaftaran
+ * 10. Keuangan: pembayaran, refund, rekening
+ * 11. Alumni: tracer study, statistik, ikatan alumni
+ * 12. Humas: berita, rilis pers, pengumuman
+ *
  * Request/Response Flow:
  * 1. Validate file type and size
  * 2. Extract text content (with optional OCR for PDFs)
@@ -30,6 +44,7 @@ import { extractTextFromFile, processDocument } from "@/lib/rag/document-process
 import type { AcademicDocumentType } from "@/lib/rag/university-domain";
 import { detectDocumentType, extractAcademicKeywords, extractCourseInfo } from "@/lib/rag/university-domain";
 import { detectDocumentLanguage } from "@/lib/rag/utils/language";
+import type { ExtendedDocumentType } from "@/lib/types";
 
 /**
  * Regular expression to extract file extension
@@ -123,30 +138,8 @@ export async function POST(request: Request) {
         const keywords = await extractAcademicKeywords(content);
 
         // Map AcademicDocumentType to DocumentMetadata.documentType
-        const mappedDocType = (() => {
-            switch (detectedType) {
-                case "syllabus":
-                case "lecture_notes":
-                case "research_paper":
-                case "textbook":
-                case "assignment":
-                    return detectedType;
-                case "rps":
-                case "modul_kuliah":
-                    return "lecture_notes";
-                case "exam":
-                case "skripsi":
-                case "tesis":
-                case "disertasi":
-                case "thesis":
-                case "dissertation":
-                case "lab_report":
-                case "case_study":
-                    return "other";
-                default:
-                    return "other";
-            }
-        })();
+        // All AcademicDocumentType values are now valid ExtendedDocumentType values
+        const mappedDocType = detectedType as ExtendedDocumentType;
 
         // Create document record
         const newDoc: NewDocument = {

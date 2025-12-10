@@ -278,20 +278,123 @@ export function DocumentUploader({ onUploadComplete }: DocumentUploaderProps) {
                             <SelectTrigger>
                                 <SelectValue />
                             </SelectTrigger>
-                            <SelectContent>
-                                <SelectItem value="auto">Auto-detect</SelectItem>
-                                <SelectItem value="syllabus">Syllabus / RPS</SelectItem>
-                                <SelectItem value="lecture_notes">Lecture Notes / Catatan Kuliah</SelectItem>
-                                <SelectItem value="research_paper">Research Paper / Makalah</SelectItem>
-                                <SelectItem value="textbook">Textbook / Buku Teks</SelectItem>
-                                <SelectItem value="assignment">Assignment / Tugas</SelectItem>
-                                <SelectItem value="skripsi">Skripsi (S1)</SelectItem>
-                                <SelectItem value="tesis">Tesis (S2)</SelectItem>
-                                <SelectItem value="disertasi">Disertasi (S3)</SelectItem>
-                                <SelectItem value="thesis">Thesis/Dissertation</SelectItem>
-                                <SelectItem value="lab_report">Lab Report / Laporan Praktikum</SelectItem>
-                                <SelectItem value="modul_kuliah">Modul Perkuliahan</SelectItem>
-                                <SelectItem value="other">Other / Lainnya</SelectItem>
+                            <SelectContent className="max-h-80">
+                                <SelectItem value="auto">🔍 Auto-detect</SelectItem>
+
+                                {/* Traditional Academic */}
+                                <SelectItem value="syllabus">📋 Syllabus / RPS</SelectItem>
+                                <SelectItem value="lecture_notes">📝 Lecture Notes / Catatan Kuliah</SelectItem>
+                                <SelectItem value="research_paper">📄 Research Paper / Makalah</SelectItem>
+                                <SelectItem value="textbook">📚 Textbook / Buku Teks</SelectItem>
+                                <SelectItem value="assignment">✏️ Assignment / Tugas</SelectItem>
+                                <SelectItem value="exam">📝 Exam / Ujian</SelectItem>
+                                <SelectItem value="skripsi">🎓 Skripsi (S1)</SelectItem>
+                                <SelectItem value="tesis">🎓 Tesis (S2)</SelectItem>
+                                <SelectItem value="disertasi">🎓 Disertasi (S3)</SelectItem>
+                                <SelectItem value="lab_report">🔬 Lab Report / Laporan Praktikum</SelectItem>
+                                <SelectItem value="modul_kuliah">📖 Modul Perkuliahan</SelectItem>
+
+                                {/* Informasi Akademik */}
+                                <SelectItem value="profil_prodi">🏫 Profil Program Studi</SelectItem>
+                                <SelectItem value="cpl">🎯 Capaian Pembelajaran (CPL)</SelectItem>
+                                <SelectItem value="kurikulum">📑 Struktur Kurikulum</SelectItem>
+                                <SelectItem value="daftar_matkul">📋 Daftar Mata Kuliah</SelectItem>
+                                <SelectItem value="kalender_akademik">📅 Kalender Akademik</SelectItem>
+                                <SelectItem value="ketentuan_krs">📝 Ketentuan KRS/KHS</SelectItem>
+                                <SelectItem value="ketentuan_ip">📊 Ketentuan IP/IPK</SelectItem>
+                                <SelectItem value="syarat_kelulusan">✅ Syarat Kelulusan</SelectItem>
+                                <SelectItem value="aturan_ta">📜 Aturan Skripsi/TA</SelectItem>
+                                <SelectItem value="aturan_yudisium">🎓 Aturan Yudisium/Wisuda</SelectItem>
+
+                                {/* Dokumen Regulasi */}
+                                <SelectItem value="buku_pedoman_akademik">📕 Buku Pedoman Akademik</SelectItem>
+                                <SelectItem value="buku_pedoman_kemahasiswaan">
+                                    📗 Buku Pedoman Kemahasiswaan
+                                </SelectItem>
+                                <SelectItem value="peraturan_rektor">⚖️ Peraturan Rektor</SelectItem>
+                                <SelectItem value="sk_akademik">📜 SK Akademik</SelectItem>
+                                <SelectItem value="sop">📋 SOP Akademik/Administrasi</SelectItem>
+                                <SelectItem value="tata_tertib">📖 Tata Tertib Mahasiswa</SelectItem>
+                                <SelectItem value="panduan_etika">⚖️ Panduan Etika Akademik</SelectItem>
+                                <SelectItem value="panduan_plagiarisme">🚫 Panduan Plagiarisme</SelectItem>
+
+                                {/* Administrasi */}
+                                <SelectItem value="prosedur_ukt">💳 Prosedur Pembayaran UKT</SelectItem>
+                                <SelectItem value="prosedur_cuti">🏖️ Prosedur Cuti Akademik</SelectItem>
+                                <SelectItem value="prosedur_surat_aktif">📄 Prosedur Surat Aktif</SelectItem>
+                                <SelectItem value="prosedur_legalisir">✅ Prosedur Legalisir</SelectItem>
+                                <SelectItem value="prosedur_pindah_prodi">🔄 Prosedur Pindah Prodi</SelectItem>
+                                <SelectItem value="prosedur_magang">💼 Prosedur Magang/PKL</SelectItem>
+                                <SelectItem value="jam_layanan">🕐 Jam Layanan</SelectItem>
+                                <SelectItem value="formulir_administrasi">📝 Formulir Administrasi</SelectItem>
+                                <SelectItem value="faq_layanan">❓ FAQ Layanan Akademik</SelectItem>
+
+                                {/* Dosen */}
+                                <SelectItem value="daftar_dosen">👨‍🏫 Daftar Dosen</SelectItem>
+                                <SelectItem value="profil_dosen">👤 Profil Dosen</SelectItem>
+                                <SelectItem value="jadwal_mengajar">📅 Jadwal Mengajar</SelectItem>
+                                <SelectItem value="publikasi_dosen">📚 Publikasi Dosen</SelectItem>
+
+                                {/* Penelitian */}
+                                <SelectItem value="daftar_penelitian">🔬 Daftar Penelitian</SelectItem>
+                                <SelectItem value="roadmap_penelitian">🗺️ Roadmap Penelitian</SelectItem>
+                                <SelectItem value="hibah_penelitian">💰 Hibah Penelitian</SelectItem>
+                                <SelectItem value="pengabdian">🤝 Pengabdian Masyarakat</SelectItem>
+                                <SelectItem value="jurnal_kampus">📰 Jurnal Kampus</SelectItem>
+                                <SelectItem value="prosiding">📑 Prosiding</SelectItem>
+                                <SelectItem value="call_for_papers">📢 Call for Papers</SelectItem>
+
+                                {/* Kemahasiswaan */}
+                                <SelectItem value="pengumuman_mahasiswa">📢 Pengumuman Mahasiswa</SelectItem>
+                                <SelectItem value="beasiswa">🎓 Informasi Beasiswa</SelectItem>
+                                <SelectItem value="lomba_kompetisi">🏆 Lomba/Kompetisi</SelectItem>
+                                <SelectItem value="ukm_organisasi">👥 UKM/Organisasi</SelectItem>
+                                <SelectItem value="agenda_kampus">📅 Agenda Kampus</SelectItem>
+                                <SelectItem value="prestasi_mahasiswa">🏅 Prestasi Mahasiswa</SelectItem>
+                                <SelectItem value="kerjasama_industri">🏢 Kerjasama Industri</SelectItem>
+                                <SelectItem value="layanan_konseling">💬 Layanan Konseling</SelectItem>
+
+                                {/* Fasilitas */}
+                                <SelectItem value="fasilitas_kampus">🏛️ Fasilitas Kampus</SelectItem>
+                                <SelectItem value="fasilitas_lab">🔬 Fasilitas Laboratorium</SelectItem>
+                                <SelectItem value="jadwal_lab">📅 Jadwal Lab</SelectItem>
+                                <SelectItem value="peraturan_lab">📋 Peraturan Lab</SelectItem>
+                                <SelectItem value="perpustakaan">📚 Perpustakaan</SelectItem>
+                                <SelectItem value="denah_kampus">🗺️ Denah Kampus</SelectItem>
+                                <SelectItem value="layanan_it">💻 Layanan IT</SelectItem>
+
+                                {/* PMB */}
+                                <SelectItem value="jalur_penerimaan">🚪 Jalur Penerimaan</SelectItem>
+                                <SelectItem value="syarat_pendaftaran">📋 Syarat Pendaftaran</SelectItem>
+                                <SelectItem value="biaya_kuliah">💰 Biaya Kuliah</SelectItem>
+                                <SelectItem value="kuota_prodi">📊 Kuota Prodi</SelectItem>
+                                <SelectItem value="panduan_pendaftaran">📖 Panduan Pendaftaran</SelectItem>
+                                <SelectItem value="faq_pmb">❓ FAQ PMB</SelectItem>
+                                <SelectItem value="jadwal_seleksi">📅 Jadwal Seleksi</SelectItem>
+                                <SelectItem value="prosedur_registrasi">✅ Prosedur Registrasi</SelectItem>
+
+                                {/* Keuangan */}
+                                <SelectItem value="rincian_biaya">💵 Rincian Biaya</SelectItem>
+                                <SelectItem value="alur_pembayaran">💳 Alur Pembayaran</SelectItem>
+                                <SelectItem value="rekening_kampus">🏦 Rekening Kampus</SelectItem>
+                                <SelectItem value="prosedur_refund">↩️ Prosedur Refund</SelectItem>
+                                <SelectItem value="keterlambatan_bayar">⏰ Keterlambatan Bayar</SelectItem>
+                                <SelectItem value="bantuan_biaya">🤝 Bantuan Biaya</SelectItem>
+
+                                {/* Alumni */}
+                                <SelectItem value="tracer_study">📊 Tracer Study</SelectItem>
+                                <SelectItem value="statistik_lulusan">📈 Statistik Lulusan</SelectItem>
+                                <SelectItem value="lowongan_alumni">💼 Lowongan Alumni</SelectItem>
+                                <SelectItem value="ikatan_alumni">🤝 Ikatan Alumni</SelectItem>
+
+                                {/* Humas */}
+                                <SelectItem value="berita_kampus">📰 Berita Kampus</SelectItem>
+                                <SelectItem value="rilis_pers">📢 Rilis Pers</SelectItem>
+                                <SelectItem value="artikel_publik">📝 Artikel Publik</SelectItem>
+                                <SelectItem value="dokumentasi_kegiatan">📸 Dokumentasi Kegiatan</SelectItem>
+                                <SelectItem value="pengumuman_resmi">📋 Pengumuman Resmi</SelectItem>
+
+                                <SelectItem value="other">📄 Other / Lainnya</SelectItem>
                             </SelectContent>
                         </Select>
                     </div>
