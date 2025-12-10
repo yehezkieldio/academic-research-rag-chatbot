@@ -12,6 +12,7 @@ export const maxDuration = 30;
 
 export async function POST(request: Request) {
     const startTime = Date.now();
+    console.log("[POST] Starting chat request processing");
 
     try {
         const {
@@ -30,6 +31,10 @@ export async function POST(request: Request) {
             enableGuardrails?: boolean;
         } = await request.json();
 
+        console.log(
+            `[POST] Parsed request - sessionId: ${sessionId}, useRag: ${useRag}, useAgenticMode: ${useAgenticMode}, retrievalStrategy: ${retrievalStrategy}, enableGuardrails: ${enableGuardrails}`
+        );
+
         const lastMessage = messages.at(-1);
         const userMessage =
             lastMessage?.parts
@@ -38,11 +43,17 @@ export async function POST(request: Request) {
                 .join(" ") || "";
         const language = detectQueryLanguage(userMessage);
 
+        console.log(`[POST] User message: "${userMessage.substring(0, 100)}...", language: ${language}`);
+
         if (enableGuardrails) {
             const [inputValidation, negativeReaction] = await Promise.all([
                 validateInput(userMessage),
                 detectNegativeReaction(userMessage),
             ]);
+
+            console.log(
+                `[POST] Guardrails - input passed: ${inputValidation.passed}, negative reaction: ${negativeReaction.detected}`
+            );
 
             // Log guardrail checks
             if (sessionId) {
@@ -61,6 +72,8 @@ export async function POST(request: Request) {
 
             // Handle negative reactions with empathetic response
             if (negativeReaction.detected && negativeReaction.severity === "high") {
+                console.log("[POST] High severity negative reaction detected - responding empathetically");
+
                 const empathyResponse =
                     language === "id"
                         ? `Saya mengerti Anda mungkin merasa ${negativeReaction.type === "frustration" ? "frustrasi" : "bingung"}. ${negativeReaction.suggestedResponse} Bagaimana saya bisa membantu Anda dengan lebih baik?`
@@ -74,6 +87,8 @@ export async function POST(request: Request) {
             }
 
             if (!inputValidation.passed) {
+                console.log("[POST] Input validation failed - blocking request");
+
                 return new Response(
                     JSON.stringify({
                         error:
@@ -91,6 +106,8 @@ export async function POST(request: Request) {
         }
 
         if (useRag && useAgenticMode) {
+            console.log("[POST] Using agentic RAG mode");
+
             const agentResult = await runAgenticRag(userMessage, {
                 sessionId,
                 retrievalStrategy,
@@ -98,6 +115,10 @@ export async function POST(request: Request) {
             });
 
             const latencyMs = Date.now() - startTime;
+
+            console.log(
+                `[POST] Agentic RAG completed - latency: ${latencyMs}ms, steps: ${agentResult.steps.length}, chunks: ${agentResult.retrievedChunks.length}`
+            );
 
             // Save to database
             if (sessionId) {
@@ -154,6 +175,8 @@ export async function POST(request: Request) {
             });
         }
 
+        console.log("[POST] Using standard RAG mode");
+
         let systemPrompt = useRag ? SYSTEM_PROMPTS.rag : SYSTEM_PROMPTS.nonRag;
         let retrievedChunks: Array<{
             chunkId: string;
@@ -174,6 +197,8 @@ export async function POST(request: Request) {
             });
 
             retrievedChunks = contextResult.chunks;
+
+            console.log(`[POST] Retrieved ${retrievedChunks.length} chunks for context`);
 
             if (contextResult.context) {
                 systemPrompt = buildRagPrompt(SYSTEM_PROMPTS.rag, contextResult.context, userMessage);
@@ -196,6 +221,8 @@ export async function POST(request: Request) {
             },
             onFinish: async ({ text, usage }) => {
                 const latencyMs = Date.now() - startTime;
+
+                console.log(`[POST] Response finished - latency: ${latencyMs}ms, tokens: ${usage?.totalTokens}`);
 
                 // Output validation
                 if (enableGuardrails) {
