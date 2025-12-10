@@ -163,8 +163,10 @@ export const useChatStore = create<ChatStore>()(
                     const session = state.sessions.find((s: ChatSession) => s.id === state.activeSessionId);
                     if (session && session.messages.length > 0) {
                         const lastMessage = session.messages.at(-1);
-                        Object.assign(lastMessage, updates);
-                        session.updatedAt = Date.now();
+                        if (lastMessage) {
+                            Object.assign(lastMessage, updates);
+                            session.updatedAt = Date.now();
+                        }
                     }
                 });
             },
