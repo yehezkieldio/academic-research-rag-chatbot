@@ -472,7 +472,7 @@ const ChatInput = memo(function ChatInputComponent({
                                     disabled={isLoading}
                                     onClick={onClear}
                                     size="icon"
-                                    title="Clear messages"
+                                    title="Delete chat session"
                                     type="button"
                                     variant="ghost"
                                 >
@@ -666,7 +666,7 @@ function useChatLogic() {
         setError,
         activeSession,
         createSession,
-        clearMessages,
+        deleteSession,
         sessions,
         activeSessionId,
     } = useChatStore();
@@ -876,16 +876,44 @@ function useChatLogic() {
     }, [messages]);
 
     const handleClear = useCallback(() => {
-        if (window.confirm("Clear all messages? This cannot be undone.")) {
-            clearMessages();
-            setMessages([]);
-            setAgentSteps([]);
-            setRetrievedChunks([]);
-            setLatencyMs(null);
-            setDetectedLanguage(null);
-            setError(null);
+        if (!session?.id) {
+            return;
         }
-    }, [clearMessages, setMessages, setError]);
+
+        if (!window.confirm("Delete this chat session? This cannot be undone.")) {
+            return;
+        }
+
+        void (async () => {
+            setLoading(true);
+            try {
+                const response = await fetch(`/api/sessions/${session.id}`, { method: "DELETE" });
+                if (!response.ok) {
+                    const errorText = await response.text().catch(() => "Failed to delete session");
+                    throw new Error(errorText || "Failed to delete session");
+                }
+
+                deleteSession(session.id);
+                setMessages([]);
+                setAgentSteps([]);
+                setRetrievedChunks([]);
+                setLatencyMs(null);
+                setDetectedLanguage(null);
+                setInput("");
+                setError(null);
+
+                const nextActiveSessionId = useChatStore.getState().activeSessionId;
+                if (nextActiveSessionId) {
+                    await loadMessagesFromDb(nextActiveSessionId);
+                }
+            } catch (err) {
+                const message = err instanceof Error ? err.message : "Failed to delete session";
+                setError(message);
+            } finally {
+                setLoading(false);
+            }
+        })();
+    }, [deleteSession, loadMessagesFromDb, session?.id, setError, setLoading, setMessages]);
 
     return {
         settings,
@@ -949,8 +977,8 @@ export function ChatInterface() {
                     </div>
                 )}
 
-                <ScrollArea className="flex-1">
-                    <div className="p-4">
+                <ScrollArea className="min-h-0 flex-1">
+                    <div className="flex p-4">
                         <MessageList
                             agentSteps={agentSteps}
                             isLoading={isLoading}

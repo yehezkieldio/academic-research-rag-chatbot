@@ -422,7 +422,7 @@ export async function runAgenticRag(
         console.log(
             `[runAgenticRag] Answer length: ${result.text.length}, citations: ${streamingState.citationManager.getCitations().length}`
         );
-        console.log(`[runAgenticRag] Answer Preview: ${result.text.substring(0, 200)}...`);
+        console.log(`[runAgenticRag] Answer Preview: ${result.text.substring(0, 50)}...`);
 
         return {
             answer: result.text,
