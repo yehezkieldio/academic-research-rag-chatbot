@@ -24,8 +24,8 @@ import {
     User,
     Zap,
 } from "lucide-react";
-import type React from "react";
 import { memo, useCallback, useEffect, useRef, useState } from "react";
+import { SessionSelector } from "@/components/chat/session-manager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card } from "@/components/ui/card";
@@ -258,13 +258,16 @@ const SourcesCollapsible = memo(function SourcesCollapsibleComponent({ chunks }:
 const ChatHeader = memo(function ChatHeaderComponent({
     detectedLanguage,
     latencyMs,
+    onSessionChange,
 }: {
     settings: { useAgenticMode: boolean; useRag: boolean };
     detectedLanguage: "en" | "id" | null;
     latencyMs: number | null;
+    onSessionChange?: (sessionId: string) => void;
 }) {
     return (
         <div className="flex items-center justify-between">
+            <SessionSelector onSessionChange={onSessionChange} />
             <div className="flex items-center gap-2">
                 {detectedLanguage && (
                     <Badge className="gap-1" variant="outline">
@@ -664,6 +667,7 @@ function useChatLogic() {
     const [latencyMs, setLatencyMs] = useState<number | null>(null);
     const [detectedLanguage, setDetectedLanguage] = useState<"en" | "id" | null>(null);
     const [input, setInput] = useState("");
+    const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
     const {
         messages,
@@ -709,16 +713,78 @@ function useChatLogic() {
         setInput(e.target.value);
     }, []);
 
+    // Load messages from database when session changes
+    const loadMessagesFromDb = useCallback(
+        async (sessionId: string) => {
+            setIsLoadingMessages(true);
+            try {
+                const response = await fetch(`/api/sessions/${sessionId}/messages`);
+                const { messages: dbMessages } = await response.json();
+
+                if (dbMessages && dbMessages.length > 0) {
+                    // Convert DB messages to UIMessage format
+                    const uiMessages: Message[] = dbMessages.map(
+                        (msg: { id: string; role: string; content: string; createdAt: string }) => ({
+                            id: msg.id,
+                            role: msg.role as "user" | "assistant",
+                            parts: [{ type: "text" as const, text: msg.content }],
+                        })
+                    );
+                    setMessages(uiMessages);
+                } else {
+                    setMessages([]);
+                }
+            } catch (err) {
+                console.error("Failed to load messages:", err);
+                setMessages([]);
+            } finally {
+                setIsLoadingMessages(false);
+            }
+        },
+        [setMessages]
+    );
+
+    // Handle session change from SessionSelector
+    const handleSessionChange = useCallback(
+        (sessionId: string) => {
+            // Reset state for new session
+            setAgentSteps([]);
+            setRetrievedChunks([]);
+            setLatencyMs(null);
+            setDetectedLanguage(null);
+            setError(null);
+            setInput("");
+
+            // Load messages from database
+            loadMessagesFromDb(sessionId);
+        },
+        [loadMessagesFromDb, setError]
+    );
+
+    // Initialize: wait for sessions to load, then set active session or create new one
     useEffect(() => {
-        if (!session) {
+        const { isLoadingSessions } = useChatStore.getState();
+
+        // Don't do anything while sessions are still loading from DB
+        if (isLoadingSessions) {
+            return;
+        }
+
+        // If no active session but we have sessions, set the most recent one as active
+        if (!session && sessions.length > 0) {
+            const mostRecent = sessions[0]; // sessions are sorted by updatedAt descending
+            useChatStore.setState({ activeSessionId: mostRecent.id });
+            return;
+        }
+
+        // Only create a new session if we have no sessions at all
+        if (!session && sessions.length === 0 && !isLoadingSessions) {
             (async () => {
                 try {
-                    // Create session in database first to get the DB-generated ID
                     const response = await fetch("/api/sessions", {
                         method: "POST",
                         headers: { "Content-Type": "application/json" },
                         body: JSON.stringify({
-                            title: "New Chat",
                             useRag: settings.useRag,
                             useAgenticMode: settings.useAgenticMode,
                             retrievalStrategy: settings.retrievalStrategy,
@@ -726,14 +792,13 @@ function useChatLogic() {
                     });
                     const { session: dbSession } = await response.json();
 
-                    // Store session with DB ID
                     if (dbSession?.id) {
                         useChatStore.setState((state) => ({
                             sessions: [
                                 ...state.sessions,
                                 {
                                     id: dbSession.id,
-                                    title: "New Chat",
+                                    title: dbSession.title || "New Chat",
                                     messages: [],
                                     createdAt: Date.now(),
                                     updatedAt: Date.now(),
@@ -745,12 +810,18 @@ function useChatLogic() {
                     }
                 } catch (err) {
                     console.error("Failed to create session:", err);
-                    // Fallback to local session only
                     createSession("New Chat");
                 }
             })();
         }
-    }, [session, createSession, settings]);
+    }, [session, sessions, createSession, settings]);
+
+    // Load messages when active session changes
+    useEffect(() => {
+        if (activeSessionId && messages.length === 0) {
+            loadMessagesFromDb(activeSessionId);
+        }
+    }, [activeSessionId, loadMessagesFromDb, messages.length]);
 
     const handleAgenticSubmit = useAgenticChat({
         messages,
@@ -781,7 +852,7 @@ function useChatLogic() {
         [input, settings.useAgenticMode, settings.useRag, handleAgenticSubmit, sendMessage]
     );
 
-    const isLoading = storeLoading || status === "submitted" || status === "streaming";
+    const isLoading = storeLoading || status === "submitted" || status === "streaming" || isLoadingMessages;
 
     const handleReload = useCallback(() => {
         const lastUserMsg = messages.filter((m) => m.role === "user").pop();
@@ -821,6 +892,7 @@ function useChatLogic() {
         onSubmit,
         handleReload,
         handleClear,
+        handleSessionChange,
     };
 }
 
@@ -842,12 +914,18 @@ export function ChatInterface() {
         onSubmit,
         handleReload,
         handleClear,
+        handleSessionChange,
     } = useChatLogic();
 
     return (
         <div className="flex h-full flex-col">
             <div className="flex flex-col gap-3 border-border border-b bg-card p-4">
-                <ChatHeader detectedLanguage={detectedLanguage} latencyMs={latencyMs} settings={settings} />
+                <ChatHeader
+                    detectedLanguage={detectedLanguage}
+                    latencyMs={latencyMs}
+                    onSessionChange={handleSessionChange}
+                    settings={settings}
+                />
                 <SettingsPanel setSettings={setSettings} settings={settings} />
             </div>
 

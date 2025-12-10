@@ -62,6 +62,7 @@ interface ChatStore {
     isLoading: boolean;
     error: string | null;
     streamingContent: string;
+    isLoadingSessions: boolean;
 
     // Settings
     settings: ChatSettings;
@@ -72,7 +73,13 @@ interface ChatStore {
     // Actions
     createSession: (title?: string) => string;
     deleteSession: (sessionId: string) => void;
+    deleteAllSessions: () => void;
     setActiveSession: (sessionId: string) => void;
+    renameSession: (sessionId: string, title: string) => void;
+    syncSessionsFromDb: (
+        dbSessions: Array<{ id: string; title: string | null; createdAt: Date; updatedAt: Date }>
+    ) => void;
+    setIsLoadingSessions: (loading: boolean) => void;
 
     addMessage: (message: Omit<ChatMessage, "id" | "createdAt">) => void;
     updateLastMessage: (updates: Partial<ChatMessage>) => void;
@@ -105,6 +112,7 @@ export const useChatStore = create<ChatStore>()(
             error: null,
             streamingContent: "",
             settings: defaultSettings,
+            isLoadingSessions: false,
 
             // Computed
             activeSession: () => {
@@ -138,9 +146,64 @@ export const useChatStore = create<ChatStore>()(
                 });
             },
 
+            deleteAllSessions: () => {
+                set((state) => {
+                    state.sessions = [];
+                    state.activeSessionId = null;
+                });
+            },
+
             setActiveSession: (sessionId) => {
                 set((state) => {
                     state.activeSessionId = sessionId;
+                });
+            },
+
+            renameSession: (sessionId, title) => {
+                set((state) => {
+                    const session = state.sessions.find((s: ChatSession) => s.id === sessionId);
+                    if (session) {
+                        session.title = title;
+                        session.updatedAt = Date.now();
+                    }
+                });
+            },
+
+            syncSessionsFromDb: (dbSessions) => {
+                set((state) => {
+                    // Merge DB sessions with existing local sessions
+                    const existingIds = new Set(state.sessions.map((s: ChatSession) => s.id));
+                    const newSessions = dbSessions
+                        .filter((dbSession) => !existingIds.has(dbSession.id))
+                        .map((dbSession) => ({
+                            id: dbSession.id,
+                            title: dbSession.title || "Untitled Chat",
+                            messages: [],
+                            createdAt: new Date(dbSession.createdAt).getTime(),
+                            updatedAt: new Date(dbSession.updatedAt).getTime(),
+                            settings: { ...defaultSettings },
+                        }));
+
+                    // Update existing sessions with DB data (title changes)
+                    for (const dbSession of dbSessions) {
+                        const existing = state.sessions.find((s: ChatSession) => s.id === dbSession.id);
+                        if (existing) {
+                            existing.title = dbSession.title || existing.title;
+                            existing.updatedAt = new Date(dbSession.updatedAt).getTime();
+                        }
+                    }
+
+                    // Add new sessions
+                    state.sessions.push(...newSessions);
+
+                    // Sort by updatedAt descending
+                    state.sessions.sort((a: ChatSession, b: ChatSession) => b.updatedAt - a.updatedAt);
+                });
+            },
+
+            setIsLoadingSessions: (loading) => {
+                set((state) => {
+                    state.isLoadingSessions = loading;
                 });
             },
 
