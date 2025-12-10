@@ -271,7 +271,7 @@ const ChatHeader = memo(function ChatHeaderComponent({
                     <GraduationCap className="h-5 w-5 text-primary" />
                 </div>
                 <div>
-                    <h2 className="font-semibold text-foreground">Academic RAG Assistant</h2>
+                    <h2 className="font-semibold text-foreground">MuliaChat</h2>
                     <p className="text-muted-foreground text-sm">
                         {(() => {
                             if (settings.useAgenticMode) return "Agentic RAG + Okapi BM25";
@@ -306,17 +306,11 @@ const EmptyState = memo(function EmptyStateComponent() {
             <div className="mx-auto mb-4 w-fit rounded-full bg-primary/10 p-4">
                 <BookOpen className="h-8 w-8 text-primary" />
             </div>
-            <h3 className="mb-2 font-medium text-foreground text-lg">Welcome to the Academic RAG Assistant</h3>
-            <p className="mb-1 text-muted-foreground text-sm">Selamat datang di Asisten RAG Akademik</p>
+            <h3 className="mb-2 font-medium text-foreground text-lg">Welcome to MuliaChat</h3>
+            <p className="mb-1 text-muted-foreground text-sm">Selamat datang di MuliaChat</p>
             <p className="mx-auto mb-4 max-w-md text-muted-foreground text-sm">
                 Ask questions in English or Bahasa Indonesia about your uploaded documents.
             </p>
-            <div className="flex flex-wrap justify-center gap-2 text-muted-foreground text-xs">
-                <Badge variant="outline">Okapi BM25 + Vector</Badge>
-                <Badge variant="outline">Multi-step Reasoning</Badge>
-                <Badge variant="outline">EN/ID Bilingual</Badge>
-                <Badge variant="outline">Guardrails Enabled</Badge>
-            </div>
         </div>
     );
 });

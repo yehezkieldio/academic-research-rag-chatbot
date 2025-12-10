@@ -1,6 +1,6 @@
 "use client";
 
-import { BarChart3, BookOpen, ChevronLeft, ChevronRight, Database, MessageSquare } from "lucide-react";
+import { BookOpen, ChevronLeft, ChevronRight, Database, MessageSquare } from "lucide-react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
@@ -19,12 +19,12 @@ const navItems = [
         icon: Database,
         description: "Document management",
     },
-    {
-        title: "Evaluation",
-        href: "/evaluation",
-        icon: BarChart3,
-        description: "RAGAS metrics",
-    },
+    // {
+    //     title: "Evaluation",
+    //     href: "/evaluation",
+    //     icon: BarChart3,
+    //     description: "RAGAS metrics",
+    // },
 ];
 
 export function Sidebar() {
@@ -43,7 +43,7 @@ export function Sidebar() {
                 {!collapsed && (
                     <div className="flex items-center gap-2">
                         <BookOpen className="h-6 w-6 text-sidebar-primary" />
-                        <span className="font-semibold text-sidebar-foreground">RAG Research</span>
+                        <span className="font-semibold text-sidebar-foreground">MuliaChat</span>
                     </div>
                 )}
                 <button
@@ -90,16 +90,6 @@ export function Sidebar() {
                     );
                 })}
             </nav>
-
-            {/* Footer */}
-            <div className="border-sidebar-border border-t p-4">
-                {!collapsed && (
-                    <div className="text-sidebar-foreground/50 text-xs">
-                        <p>Academic RAG Platform</p>
-                        <p>Research v1.0</p>
-                    </div>
-                )}
-            </div>
         </aside>
     );
 }
