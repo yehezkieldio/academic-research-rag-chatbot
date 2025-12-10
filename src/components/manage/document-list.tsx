@@ -51,6 +51,7 @@ interface Document {
         department?: string;
         keywords?: string[];
         chunksCount?: number;
+        pages?: number;
     };
     createdAt: string;
 }
