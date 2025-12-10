@@ -25,7 +25,7 @@ import {
     User,
     Zap,
 } from "lucide-react";
-import { memo, useCallback, useEffect, useMemo, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { SessionSelector } from "@/components/chat/session-manager";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -646,22 +646,6 @@ function useChatLogic() {
     const [input, setInput] = useState("");
     const [isLoadingMessages, setIsLoadingMessages] = useState(false);
 
-    // Memoize the transport to prevent recreation on every render
-    const transport = useMemo(
-        () =>
-            new DefaultChatTransport({
-                api: "/api/chat",
-                body: () => ({
-                    sessionId: session?.id,
-                    useRag: settings.useRag,
-                    useAgenticMode: settings.useAgenticMode,
-                    retrievalStrategy: settings.retrievalStrategy,
-                    enableGuardrails: settings.enableGuardrails,
-                }),
-            }),
-        [session?.id, settings.useRag, settings.useAgenticMode, settings.retrievalStrategy, settings.enableGuardrails]
-    );
-
     const {
         messages,
         sendMessage,
@@ -670,7 +654,19 @@ function useChatLogic() {
         error: chatError,
         stop,
     } = useChat<MessageWithMetadata>({
-        transport,
+        transport: new DefaultChatTransport({
+            api: "/api/chat",
+            body: () => {
+                const currentState = useChatStore.getState();
+                return {
+                    sessionId: currentState.activeSessionId,
+                    useRag: currentState.settings.useRag,
+                    useAgenticMode: currentState.settings.useAgenticMode,
+                    retrievalStrategy: currentState.settings.retrievalStrategy,
+                    enableGuardrails: currentState.settings.enableGuardrails,
+                };
+            },
+        }),
         experimental_throttle: 50, // Throttle UI updates for better performance
         onFinish: ({ message }) => {
             // Extract metadata from the finished message

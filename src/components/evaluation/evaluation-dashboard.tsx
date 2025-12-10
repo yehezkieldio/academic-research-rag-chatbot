@@ -127,7 +127,7 @@ export function EvaluationDashboard() {
 
     const { data: ablationData, mutate: mutateAblation } = useSWR("/api/evaluation/ablation", fetcher);
 
-    const runs: EvaluationRun[] = runsData || [];
+    const runs: EvaluationRun[] = Array.isArray(runsData) ? runsData : [];
 
     const runEvaluation = async (id: string) => {
         await fetch(`/api/evaluation/${id}/run`, { method: "POST" });
