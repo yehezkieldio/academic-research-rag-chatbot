@@ -479,10 +479,24 @@ async function executeAgentWorkflow(
     steps: AgentStep[],
     streamCallback?: (step: AgentStep) => void
 ) {
+    // Enforce response language explicitly in the system prompt to prevent bilingual bias
+    const systemWithLanguage = `${AGENTIC_SYSTEM_PROMPT}\n\n[LANGUAGE ENFORCER] Always respond ONLY in ${
+        language === "id" ? "Bahasa Indonesia" : "English"
+    }. Respond in the same language as the user query.`;
+
+    // Log language + top chunk languages to help debug accidental language switching
+    console.log(`[executeAgentWorkflow] Expected response language: ${language}`);
+    console.log(
+        `[executeAgentWorkflow] Top retrieved chunk languages: ${streamingState.retrievedChunks
+            .slice(0, 5)
+            .map((c) => detectQueryLanguage(c.content))
+            .join(", ")}`
+    );
+
     const result = await generateText({
         model: CHAT_MODEL,
-        system: AGENTIC_SYSTEM_PROMPT,
-        prompt: `${language === "id" ? "Jawab dalam Bahasa Indonesia: " : ""}${query}`,
+        system: systemWithLanguage,
+        prompt: `${query}`,
         tools: agentTools,
         stopWhen: stepCountIs(maxSteps),
         temperature: 0.3,
@@ -500,6 +514,41 @@ async function executeAgentWorkflow(
             processStepFinish(stepResult, steps, streamingState, streamCallback);
         },
     });
+
+    // If the model answered using the wrong language, try a forced re-synthesis
+    try {
+        const detected = detectQueryLanguage(result.text || "");
+        if (detected && detected !== language) {
+            console.warn(
+                `[executeAgentWorkflow] Language mismatch detected: expected=${language}, actual=${detected}. Attempting forced re-synthesis.`
+            );
+
+            const sourcesText = streamingState.retrievedChunks
+                .slice(0, 10)
+                .map((s, i) => `[${i + 1}] ${s.documentTitle}:\n${s.content}`)
+                .join("\n\n");
+
+            try {
+                const { text: synthText } = await generateText({
+                    model: CHAT_MODEL,
+                    system: systemWithLanguage,
+                    prompt: `${language === "id" ? "Sintesis jawaban komprehensif dalam Bahasa Indonesia" : "Synthesize a comprehensive answer"} for this question using the provided sources. Include citations [1], [2], etc.\n\nQuestion: ${query}\n\nSources:\n${sourcesText}`,
+                    temperature: 0.3,
+                    experimental_telemetry: telemetryConfig,
+                });
+
+                if (synthText && synthText.trim().length > 0) {
+                    console.log("[executeAgentWorkflow] Forced re-synthesis succeeded; using synthesized answer.");
+                    const newResult = { ...result, text: synthText } as typeof result;
+                    return newResult;
+                }
+            } catch (synthErr) {
+                console.error("[executeAgentWorkflow] Forced re-synthesis failed:", synthErr);
+            }
+        }
+    } catch (err) {
+        console.error("[executeAgentWorkflow] Failed to detect language of model output:", err);
+    }
 
     return result;
 }
@@ -704,10 +753,22 @@ export async function streamAgenticRag(
 
     const agentTools = createAgentTools(language, streamingState);
 
+    const systemWithLanguage = `${AGENTIC_SYSTEM_PROMPT}\n\n[LANGUAGE ENFORCER] Always respond ONLY in ${
+        language === "id" ? "Bahasa Indonesia" : "English"
+    }. Respond in the same language as the user query.`;
+
+    console.log(`[streamAgenticRag] Using enforced language: ${language}`);
+    console.log(
+        `[streamAgenticRag] Top-of-context chunk languages: ${streamingState.retrievedChunks
+            .slice(0, 5)
+            .map((c) => detectQueryLanguage(c.content))
+            .join(", ")}`
+    );
+
     const result = streamText({
         model: CHAT_MODEL,
-        system: AGENTIC_SYSTEM_PROMPT,
-        prompt: `${language === "id" ? "Jawab dalam Bahasa Indonesia.\n\n" : ""}Context:\n${context}\n\nQuestion: ${query}`,
+        system: systemWithLanguage,
+        prompt: `Context:\n${context}\n\nQuestion: ${query}`,
         tools: agentTools,
         stopWhen: stepCountIs(maxSteps),
         temperature: 0.4,
