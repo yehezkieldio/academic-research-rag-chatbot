@@ -1,6 +1,6 @@
 import { BarChart3 } from "lucide-react";
 import { EvaluationDashboard } from "@/components/evaluation/evaluation-dashboard";
-import { Sidebar } from "@/components/layout/sidebar";
+import { Sidebar } from "@/components/sidebar";
 
 export default function EvaluationPage() {
     return (

@@ -1,6 +1,10 @@
 import { cosineSimilarity, generateText } from "ai";
-import { CHAT_MODEL } from "@/lib/ai";
+import { CHAT_MODEL, telemetryConfig } from "@/lib/ai";
 import { generateEmbedding } from "@/lib/ai/embeddings";
+import { runAgenticRag } from "./agentic-rag";
+import { buildRagPrompt, retrieveContext, SYSTEM_PROMPTS } from "./context-builder";
+import { hybridRetrieve } from "./hybrid-retrieval";
+import type { RerankerStrategy } from "./reranker";
 
 export interface EvaluationMetrics {
     // Core RAGAS metrics
@@ -899,58 +903,91 @@ export const ABLATION_CONFIGS: AblationConfig[] = [
 ];
 
 // Run ablation study
+/**
+ * Run an ablation study comparing different RAG configurations.
+ * This function uses the actual RAG pipeline (agentic or standard) based on config settings.
+ *
+ * @param questions - Array of evaluation questions with ground truth answers
+ * @param configs - RAG configurations to test (defaults to ABLATION_CONFIGS)
+ * @param options - Optional settings for progress callbacks
+ * @returns Array of ablation results with metrics for each configuration
+ */
 export async function runAblationStudy(
     questions: { question: string; groundTruth: string }[],
-    configs: AblationConfig[] = ABLATION_CONFIGS
+    configs: AblationConfig[] = ABLATION_CONFIGS,
+    options: {
+        onProgress?: (configIndex: number, questionIndex: number, totalConfigs: number, totalQuestions: number) => void;
+    } = {}
 ): Promise<AblationResult[]> {
     const results: AblationResult[] = [];
+    const { onProgress } = options;
 
-    for (const config of configs) {
+    console.log(
+        `[runAblationStudy] Starting ablation study with ${configs.length} configs and ${questions.length} questions`
+    );
+
+    for (let configIdx = 0; configIdx < configs.length; configIdx++) {
+        const config = configs[configIdx];
+        console.log(`[runAblationStudy] Testing config ${configIdx + 1}/${configs.length}: ${config.name}`);
+
         const latencyTracker = createLatencyTracker();
         latencyTracker.start();
 
         const sampleResults: AblationResult["sampleResults"] = [];
         const allMetrics: EvaluationMetrics[] = [];
 
-        for (const { question, groundTruth } of questions) {
+        for (let qIdx = 0; qIdx < questions.length; qIdx++) {
+            const { question, groundTruth } = questions[qIdx];
             const questionStartTime = Date.now();
 
-            // Simulate RAG pipeline with latency tracking
-            latencyTracker.mark("retrieval", { documentsProcessed: config.topK });
+            console.log(
+                `[runAblationStudy] [${config.name}] Question ${qIdx + 1}/${questions.length}: "${question.substring(0, 50)}..."`
+            );
 
-            if (config.useReranker) {
-                latencyTracker.mark("reranking", { documentsProcessed: config.topK });
+            // Report progress if callback provided
+            onProgress?.(configIdx, qIdx, configs.length, questions.length);
+
+            let answer: string;
+            let contexts: string[];
+            let retrievedIds: string[] | undefined;
+
+            try {
+                // Execute the actual RAG pipeline based on configuration
+                const pipelineResult = await executeRagPipeline(question, config, latencyTracker);
+                answer = pipelineResult.answer;
+                contexts = pipelineResult.contexts;
+                retrievedIds = pipelineResult.retrievedIds;
+
+                console.log(
+                    `[runAblationStudy] [${config.name}] Answer generated - length: ${answer.length}, contexts: ${contexts.length}`
+                );
+            } catch (error) {
+                console.error(`[runAblationStudy] [${config.name}] Error processing question:`, error);
+                // On error, use empty results but continue with study
+                answer = `[Error] Failed to generate answer for: ${question}`;
+                contexts = [];
+                retrievedIds = undefined;
             }
 
-            if (config.useAgenticMode) {
-                latencyTracker.mark("planning");
-                latencyTracker.mark("tool_call", { toolName: "search_documents" });
-                latencyTracker.mark("synthesis");
-            }
-
-            latencyTracker.mark("generation");
-
-            // Placeholder for actual implementation
-            const answer = `[${config.name}] Simulated answer for: ${question}`;
-            const contexts = [`Context for ${config.name}`];
             const questionLatencyMs = Date.now() - questionStartTime;
 
+            // Calculate all RAGAS metrics using the actual LLM-based evaluation
             const metrics = await calculateAllMetrics(
                 question,
                 answer,
                 contexts,
                 groundTruth,
-                undefined, // retrievedIds
-                undefined, // relevantIds
-                undefined, // domain
-                latencyTracker // Pass the tracker
+                retrievedIds,
+                undefined, // relevantIds - would need ground truth relevance labels
+                "akademik/universitas",
+                latencyTracker
             );
 
             allMetrics.push(metrics);
             sampleResults.push({ question, answer, groundTruth, contexts, latencyMs: questionLatencyMs });
         }
 
-        // Average metrics
+        // Average metrics across all questions for this config
         const avgMetrics = averageMetrics(allMetrics);
 
         results.push({
@@ -959,9 +996,103 @@ export async function runAblationStudy(
             latencyProfile: latencyTracker.getProfile(),
             sampleResults,
         });
+
+        console.log(
+            `[runAblationStudy] Config ${config.name} completed - avgFaithfulness: ${avgMetrics.faithfulness.toFixed(3)}, avgCorrectness: ${avgMetrics.answerCorrectness.toFixed(3)}`
+        );
     }
 
+    console.log(`[runAblationStudy] Ablation study completed - ${results.length} configurations tested`);
     return results;
+}
+
+/**
+ * Execute the RAG pipeline for a single question based on the ablation config.
+ * Routes to either agentic RAG, standard RAG, or baseline LLM based on settings.
+ */
+async function executeRagPipeline(
+    question: string,
+    config: AblationConfig,
+    latencyTracker: ReturnType<typeof createLatencyTracker>
+): Promise<{ answer: string; contexts: string[]; retrievedIds: string[] }> {
+    // Baseline: No RAG - pure LLM response
+    if (!config.useRag) {
+        console.log(`[executeRagPipeline] Using baseline (no RAG) for: ${config.name}`);
+        latencyTracker.mark("generation");
+
+        const { text } = await generateText({
+            model: CHAT_MODEL,
+            system: SYSTEM_PROMPTS.nonRag,
+            prompt: question,
+            temperature: 0.3,
+            experimental_telemetry: telemetryConfig,
+        });
+
+        return { answer: text, contexts: [], retrievedIds: [] };
+    }
+
+    // Agentic RAG mode: Use the full agentic pipeline with tools
+    if (config.useAgenticMode) {
+        console.log(`[executeRagPipeline] Using agentic RAG for: ${config.name}`);
+        latencyTracker.mark("planning");
+
+        const agenticResult = await runAgenticRag(question, {
+            sessionId: crypto.randomUUID(),
+            retrievalStrategy: config.retrievalStrategy,
+            enableGuardrails: config.useGuardrails,
+            maxSteps: 5,
+            rerankerStrategy: config.rerankerStrategy as RerankerStrategy | undefined,
+        });
+
+        latencyTracker.mark("synthesis", { tokensGenerated: agenticResult.answer.length });
+
+        const contexts = agenticResult.retrievedChunks.map((c) => c.content);
+        const retrievedIds = agenticResult.retrievedChunks.map((c) => c.chunkId);
+
+        return { answer: agenticResult.answer, contexts, retrievedIds };
+    }
+
+    // Standard RAG mode: Retrieval + Generation
+    console.log(`[executeRagPipeline] Using standard RAG for: ${config.name}`);
+
+    // Step 1: Retrieval
+    latencyTracker.mark("retrieval", { documentsProcessed: config.topK });
+
+    const retrievalResults = await hybridRetrieve(question, {
+        strategy: config.retrievalStrategy,
+        topK: config.topK,
+        language: config.language,
+    });
+
+    const contexts = retrievalResults.map((r) => r.content);
+    const retrievedIds = retrievalResults.map((r) => r.chunkId);
+
+    // Step 2: Optional re-ranking (simulated - actual reranking would be in hybrid-retrieval)
+    if (config.useReranker) {
+        latencyTracker.mark("reranking", { documentsProcessed: retrievalResults.length });
+        // Note: Re-ranking is typically already applied in hybridRetrieve when using ensemble strategy
+        // This marker is for tracking purposes
+    }
+
+    // Step 3: Build context and generate response
+    const contextResult = await retrieveContext(question, {
+        topK: config.topK,
+        strategy: config.retrievalStrategy,
+        language: config.language,
+    });
+
+    latencyTracker.mark("generation");
+
+    const ragPrompt = buildRagPrompt(SYSTEM_PROMPTS.rag, contextResult.context, question);
+
+    const ragResponse = await generateText({
+        model: CHAT_MODEL,
+        prompt: ragPrompt,
+        temperature: 0.3,
+        experimental_telemetry: telemetryConfig,
+    });
+
+    return { answer: ragResponse.text, contexts, retrievedIds };
 }
 
 function defaultZeroMetrics(): EvaluationMetrics {

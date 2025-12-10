@@ -1,7 +1,7 @@
 import { Database, FileText, Upload } from "lucide-react";
-import { Sidebar } from "@/components/layout/sidebar";
 import { DocumentList } from "@/components/manage/document-list";
 import { DocumentUploader } from "@/components/manage/document-uploader";
+import { Sidebar } from "@/components/sidebar";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
 export default function ManagePage() {

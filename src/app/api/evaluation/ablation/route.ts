@@ -1,7 +1,8 @@
-import { desc } from "drizzle-orm";
+import { desc, eq } from "drizzle-orm";
 import { db } from "@/lib/db";
-import { ablationStudies } from "@/lib/db/schema";
-import { ABLATION_CONFIGS } from "@/lib/rag/evaluation";
+import { ablationStudies, evaluationQuestions as evaluationQuestionsTable } from "@/lib/db/schema";
+import { ACADEMIC_QUESTIONS } from "@/lib/evaluation-questions";
+import { ABLATION_CONFIGS, type AblationConfig, generateAblationReport, runAblationStudy } from "@/lib/rag/evaluation";
 
 export async function GET() {
     try {
@@ -9,6 +10,7 @@ export async function GET() {
 
         return Response.json({ studies });
     } catch (error) {
+        console.error("[GET /api/evaluation/ablation] Error:", error);
         return Response.json({ error: "Failed to fetch ablation studies" }, { status: 500 });
     }
 }
@@ -16,71 +18,105 @@ export async function GET() {
 export async function POST(request: Request) {
     try {
         const body = await request.json().catch(() => ({}));
-        const { questions = [], configs = ABLATION_CONFIGS.slice(0, 5) } = body; // Default to first 5 configs
+        const {
+            questions: providedQuestions = [],
+            configs: providedConfigs,
+            name: studyName,
+            description: studyDescription,
+        } = body;
+
+        // Parse configs - use provided or default to first 5 for faster testing
+        const configs: AblationConfig[] = providedConfigs || ABLATION_CONFIGS.slice(0, 5);
+
+        // Get questions from various sources
+        let testQuestions: { question: string; groundTruth: string }[] = [];
+
+        if (providedQuestions.length > 0) {
+            // Use provided questions
+            testQuestions = providedQuestions;
+        } else {
+            // Try to get questions from the latest evaluation run
+            const latestQuestions = await db
+                .select({
+                    question: evaluationQuestionsTable.question,
+                    groundTruth: evaluationQuestionsTable.groundTruth,
+                })
+                .from(evaluationQuestionsTable)
+                .limit(20);
+
+            if (latestQuestions.length > 0) {
+                testQuestions = latestQuestions;
+            } else {
+                // Fallback to predefined academic questions from the centralized store
+                testQuestions = ACADEMIC_QUESTIONS.map((q) => ({
+                    question: q.question,
+                    groundTruth: q.groundTruth,
+                }));
+            }
+        }
+
+        console.log(
+            `[POST /api/evaluation/ablation] Starting ablation study with ${testQuestions.length} questions and ${configs.length} configs`
+        );
 
         // Create ablation study record
         const [study] = await db
             .insert(ablationStudies)
             .values({
-                name: `Ablation Study ${new Date().toISOString()}`,
-                description: "Automated ablation study comparing RAG configurations",
+                name: studyName || `Ablation Study ${new Date().toISOString()}`,
+                description:
+                    studyDescription ||
+                    `Automated ablation study comparing ${configs.length} RAG configurations with ${testQuestions.length} questions`,
                 status: "running",
-                configurations: configs,
+                configurations: configs.map((c) => ({
+                    name: c.name,
+                    useRag: c.useRag,
+                    useReranker: c.useReranker,
+                    rerankerStrategy: c.rerankerStrategy,
+                    retrievalStrategy: c.retrievalStrategy,
+                    chunkingStrategy: c.chunkingStrategy,
+                    useAgenticMode: c.useAgenticMode,
+                    useGuardrails: c.useGuardrails,
+                    topK: c.topK,
+                })),
             })
             .returning();
 
-        // If no questions provided, use sample questions
-        const testQuestions =
-            questions.length > 0
-                ? questions
-                : [
-                      {
-                          question: "Apa yang dimaksud dengan metodologi penelitian kualitatif?",
-                          groundTruth:
-                              "Metodologi penelitian kualitatif adalah pendekatan penelitian yang berfokus pada pemahaman mendalam tentang fenomena sosial melalui pengumpulan data non-numerik.",
-                      },
-                      {
-                          question: "Jelaskan konsep validitas dalam penelitian akademik.",
-                          groundTruth:
-                              "Validitas mengacu pada sejauh mana instrumen penelitian mengukur apa yang seharusnya diukur. Validitas meliputi validitas isi, konstruk, dan kriteria.",
-                      },
-                  ];
+        // Run the actual ablation study with real RAG pipeline
+        const ablationResults = await runAblationStudy(testQuestions, configs, {
+            onProgress: (configIdx, questionIdx, totalConfigs, totalQuestions) => {
+                console.log(
+                    `[Ablation Progress] Config ${configIdx + 1}/${totalConfigs}, Question ${questionIdx + 1}/${totalQuestions}`
+                );
+            },
+        });
 
-        // Run ablation study (simplified - in production this would be async)
-        // This is a placeholder that shows the structure
-        // @ts-expect-error FIXME: type will be fixed later
-        const results = configs.map((config) => ({
-            configName: config.name,
+        // Format results for storage
+        const results = ablationResults.map((result) => ({
+            configName: result.config.name,
             metrics: {
-                faithfulness: Math.random() * 0.3 + 0.7,
-                answerRelevancy: Math.random() * 0.3 + 0.7,
-                contextPrecision: Math.random() * 0.3 + 0.6,
-                contextRecall: Math.random() * 0.3 + 0.6,
-                answerCorrectness: Math.random() * 0.3 + 0.65,
-                academicRigor: Math.random() * 0.2 + 0.75,
-                citationAccuracy: Math.random() * 0.2 + 0.7,
-                terminologyCorrectness: Math.random() * 0.15 + 0.8,
-                hallucinationRate: Math.random() * 0.2 + 0.1,
-                factualConsistency: Math.random() * 0.2 + 0.75,
-                sourceAttribution: Math.random() * 0.2 + 0.7,
-                contradictionScore: Math.random() * 0.15 + 0.8,
+                faithfulness: result.metrics.faithfulness,
+                answerRelevancy: result.metrics.answerRelevancy,
+                contextPrecision: result.metrics.contextPrecision,
+                contextRecall: result.metrics.contextRecall,
+                answerCorrectness: result.metrics.answerCorrectness,
+                academicRigor: result.metrics.academicRigor,
+                citationAccuracy: result.metrics.citationAccuracy,
+                terminologyCorrectness: result.metrics.terminologyCorrectness,
+                hallucinationRate: result.metrics.hallucinationRate,
+                factualConsistency: result.metrics.factualConsistency,
+                sourceAttribution: result.metrics.sourceAttribution,
+                contradictionScore: result.metrics.contradictionScore,
+                totalLatencyMs: result.metrics.totalLatencyMs,
+                retrievalLatencyMs: result.metrics.retrievalLatencyMs,
+                rerankingLatencyMs: result.metrics.rerankingLatencyMs,
+                generationLatencyMs: result.metrics.generationLatencyMs,
+                agentReasoningLatencyMs: result.metrics.agentReasoningLatencyMs,
             },
         }));
 
-        // Generate report
-        const report =
-            `# Ablation Study Report
-
-## Summary
-- Configurations tested: ${configs.length}
-- Questions evaluated: ${testQuestions.length}
-` +
-            // - Best performing: ${results.reduce((a, b) => (a.metrics.answerCorrectness > b.metrics.answerCorrectness ? a : b)).configName}
-            `
-
-## Key Findings
-The hybrid retrieval with ensemble re-ranking showed the best overall performance.
-`;
+        // Generate comprehensive report
+        const report = generateAblationReport(ablationResults);
 
         // Update study with results
         await db
@@ -91,15 +127,15 @@ The hybrid retrieval with ensemble re-ranking showed the best overall performanc
                 report,
                 completedAt: new Date(),
             })
-            .where(sql`${ablationStudies.id} = ${study.id}`);
+            .where(eq(ablationStudies.id, study.id));
+
+        console.log(`[POST /api/evaluation/ablation] Ablation study completed: ${study.id}`);
 
         return Response.json({
             study: { ...study, results, report, status: "completed" },
         });
     } catch (error) {
-        console.error("Ablation study error:", error);
+        console.error("[POST /api/evaluation/ablation] Ablation study error:", error);
         return Response.json({ error: "Failed to run ablation study" }, { status: 500 });
     }
 }
-
-import { sql } from "drizzle-orm";
