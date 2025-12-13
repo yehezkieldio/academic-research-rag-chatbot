@@ -11,13 +11,20 @@
  * - UTF-8 is default but UTF-16 is common on Windows
  * - Correct encoding prevents character corruption (especially Indonesian)
  *
+ * WHY ASCII Report Preprocessing:
+ * - Structured reports (tables, key-value pairs) lose context when chunked
+ * - ASCII noise (|, +, =) wastes tokens and confuses embeddings
+ * - Preprocessing converts to natural language before embedding
+ *
  * Key Features:
  * - BOM detection for UTF-8, UTF-16LE, UTF-16BE
  * - Markdown heading extraction (# through ######)
+ * - ASCII report detection and transformation
  * - Word counting for statistics
  * - Fallback to UTF-8 if encoding unclear
  */
 
+import { isStructuredAsciiReport, parseAndSerializeReport } from "../parsers/ascii-report";
 import type { ExtractionResult } from "./types";
 
 // Regex patterns (defined at module level for performance)
@@ -79,25 +86,35 @@ function extractMarkdownHeadings(text: string): Array<{ text: string; level: num
 
 /**
  * Extract text from plain text files
+ *
+ * WHY ASCII Report Preprocessing:
+ * - Structured ASCII reports contain tables, delimiters, key-value pairs
+ * - Raw chunking separates table headers from data rows
+ * - Preprocessing converts to natural language sentences
+ *
  * @throws Error if text extraction fails
  */
 export function extractText(buffer: ArrayBuffer, fileName: string): ExtractionResult {
     try {
         const encoding = detectEncoding(buffer);
         const decoder = new TextDecoder(encoding);
-        const text = decoder.decode(buffer);
+        const rawText = decoder.decode(buffer);
 
-        if (!text || text.trim().length === 0) {
+        if (!rawText || rawText.trim().length === 0) {
             throw new Error(`Text extraction failed: No content found in ${fileName}`);
         }
 
+        // Preprocess structured ASCII reports
+        const reportResult = isStructuredAsciiReport(rawText) ? parseAndSerializeReport(rawText) : null;
+        const processedText = reportResult?.serializedText ?? rawText;
+
         return {
-            text,
+            text: processedText,
             metadata: {
                 encoding,
                 fileSize: buffer.byteLength,
-                wordCount: text.split(WORD_SPLIT_PATTERN).filter((w) => w.length > 0).length,
-                extractionMethod: "text-decoder",
+                wordCount: processedText.split(WORD_SPLIT_PATTERN).filter((w) => w.length > 0).length,
+                extractionMethod: reportResult?.isStructuredReport ? "ascii-report-parser" : "text-decoder",
             },
         };
     } catch (error) {
